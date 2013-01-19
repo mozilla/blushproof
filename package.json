@@ -1,9 +1,9 @@
 {
   "name": "blushproof",
   "fullName": "blushproof",
-  "id": "jid1-uewfsjEqM24GeA",
-  "description": "a basic add-on",
-  "author": "",
+  "id": "blushproof@ux.mozilla.com",
+  "description": "stop opening naughty sites accidentally",
+  "author": "Gregg Lind <glind@mozilla.com>",
   "license": "MPL 2.0",
   "version": "0.1"
 }
