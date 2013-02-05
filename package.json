@@ -3,7 +3,7 @@
   "fullName": "blushproof",
   "id": "blushproof@ux.mozilla.com",
   "description": "stop opening naughty sites accidentally",
-  "author": "Gregg Lind <glind@mozilla.com>",
+  "author": "David Keeler <dkeeler@mozilla.com>, Monica Chew <mmc@mozilla.com>, Gregg Lind <glind@mozilla.com>",
   "license": "MPL 2.0",
   "version": "0.1"
 }
