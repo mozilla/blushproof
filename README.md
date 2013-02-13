@@ -1,4 +1,4 @@
-To run: cfx -b <path_to_nightly> -p <profile_dir> run
+To run: cfx -b _path-to-nightly_ -p _profile-dir_ run
 
 Setting the profile_dir is necessary when testing functionality across
 restarts.
