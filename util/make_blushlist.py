@@ -20,7 +20,7 @@ def main():
       sys.exit("Can't find file")
     category = sys.argv[i + 1]
     for l in f_in.readlines():
-      l = l.strip()
+      l = l.strip().lower()
       f_out.write("  \"%s\" : \"%s\", \n" % (l, category));
     f_in.close()
     i += 2

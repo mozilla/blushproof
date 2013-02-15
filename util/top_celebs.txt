@@ -23,7 +23,7 @@ Jennifer Aniston
 Glenn Beck
 Adele
 Bon Jovi
-Dr. Dre
+Dr Dre
 Kobe Bryant
 Brad Pitt
 Ryan Seacrest
@@ -39,7 +39,7 @@ Jay-Z
 Jerry Bruckheimer
 Peyton Manning
 David Letterman
-Sean "Diddy" Combs
+Sean Combs
 Kristen Stewart
 Cristiano Ronaldo
 Kanye West
@@ -82,7 +82,7 @@ Eva Longoria
 John Grisham
 Meryl Streep
 Tiesto
-J.K. Rowling
+JK Rowling
 Sarah Jessica Parker
 Li Na
 Hugh Laurie
