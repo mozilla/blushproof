@@ -18,7 +18,7 @@ def main():
     try:
       f_in = open(sys.argv[i], "r")
     except IOError as e:
-      sys.exit("Can't find file: %s" % e)
+      sys.exit("Can't find file: %s" % e)  
     category = sys.argv[i + 1]
     for l in f_in.readlines():
       l = l.strip().lower()
