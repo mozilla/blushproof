@@ -51,6 +51,7 @@ exec cfx xpi
 exec git add blushproof.xpi
 
 for f in `git diff-index --name-only ${against} -- | egrep *.py`; do
+  echo "pylint $f"
   pylint $f
   if [ $? != 0 ]
     echo "Lint checks failed"
