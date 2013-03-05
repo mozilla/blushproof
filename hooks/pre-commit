@@ -50,6 +50,7 @@ fi
 exec cfx xpi
 exec git add blushproof.xpi
 
+echo "Running pylint"
 for f in `git diff-index --name-only ${against} -- | egrep *.py`; do
   echo "pylint $f"
   pylint $f
