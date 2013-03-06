@@ -50,7 +50,7 @@ done
 # Rebuild the xpi if any javascript files changed and add it. We could run lint
 # against js_files, but jslint is awfully picky.
 js_files=`git diff-index --name-only ${against} -- | egrep *.js$`
-if [ $js_files ]
+if [ ! -z "$js_files" ]
 then
   echo "Building xpi"
   cfx xpi
