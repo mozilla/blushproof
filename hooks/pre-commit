@@ -39,7 +39,7 @@ fi
 # Run lint
 for f in `git diff-index --name-only ${against} -- | egrep *.py$`; do
   echo "Running pylint $f"
-  pylint $f
+  pylint --rcfile=hooks/pylintrc $f
   if [ $? != 0 ]
   then
     echo "Lint checks failed"
