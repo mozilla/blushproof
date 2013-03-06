@@ -2,7 +2,7 @@
 # Create blushlist.js from a list a domain names.
 # Usage: make_blushlist.py <input_file> <category>
 
-import sys
+import sys, hashlib
 def main():
   if len(sys.argv) < 4:
     sys.exit("Usage: make_blushlist.py <output_file> {<input_file_i> <category_i>}")
@@ -12,6 +12,7 @@ def main():
   f_out.write("let blushlist = {\n");
   i = 2
 
+  hasher = hashlib.new('sha256')
   # Process all of the files, one by one
   while i < len(sys.argv):
     try:
@@ -21,7 +22,9 @@ def main():
     category = sys.argv[i + 1]
     for l in f_in.readlines():
       l = l.strip().lower()
-      f_out.write("  \"%s\" : \"%s\",\n" % (l, category));
+      hasher.update(l)
+      f_out.write("  \"%s\" : \"%s\",\n" % (hasher.hexdigest()[:48], category));
+      hasher = hashlib.new('sha256')
     f_in.close()
     i += 2
 
