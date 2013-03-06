@@ -2,7 +2,7 @@
 """Create a blushlist file from the given input files and categories."""
 # Usage: make_blushlist.py <input_file> <category>
 
-import sys
+import sys, hashlib
 def main():
   """Read all input files and output the blushlist file."""
   if len(sys.argv) < 4:
@@ -14,6 +14,7 @@ def main():
   f_out.write("let blushlist = {\n")
   i = 2
 
+  hasher = hashlib.new('sha256')
   # Process all of the files, one by one
   while i < len(sys.argv):
     try:
@@ -23,7 +24,9 @@ def main():
     category = sys.argv[i + 1]
     for line in f_in.readlines():
       line = line.strip().lower()
-      f_out.write("  \"%s\" : \"%s\",\n" % (line, category))
+      hasher.update(line)
+      f_out.write("  \"%s\" : \"%s\",\n" % (hasher.hexdigest()[:48], category))
+      hasher = hashlib.new('sha256')
     f_in.close()
     i += 2
 
