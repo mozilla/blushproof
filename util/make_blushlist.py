@@ -29,7 +29,7 @@ def main():
   f_out.write("};\n")
   f_out.write("module.exports = blushlist;\n")
 
-  f_out.close()  
+  f_out.close()
 
 if __name__ == "__main__":
   main()
