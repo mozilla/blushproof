@@ -1,9 +1,10 @@
 #!/usr/bin/python
-# Create blushlist.js from a list a domain names.
+"""Create a blushlist file from the given input files and categories."""
 # Usage: make_blushlist.py <input_file> <category>
 
 import sys
 def main():
+  """Read all input files and output the blushlist file."""
   if len(sys.argv) < 4:
     sys.exit("Usage: make_blushlist.py <output_file> {<input_file_i> "
              "<category_i>}")
@@ -17,12 +18,12 @@ def main():
   while i < len(sys.argv):
     try:
       f_in = open(sys.argv[i], "r")
-    except IOError as e:
-      sys.exit("Can't find file: %s" % e)
+    except IOError as ex:
+      sys.exit("Can't find file: %s" % ex)
     category = sys.argv[i + 1]
-    for l in f_in.readlines():
-      l = l.strip().lower()
-      f_out.write("  \"%s\" : \"%s\",\n" % (l, category))
+    for line in f_in.readlines():
+      line = line.strip().lower()
+      f_out.write("  \"%s\" : \"%s\",\n" % (line, category))
     f_in.close()
     i += 2
 
