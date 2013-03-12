@@ -1,13 +1,12 @@
 <html>
 <head>
-  <script src="button-script.js"></script>
-<body onLoad="init()">
+<body>
 <center>
   <p>Add this site to the blushlist?</p>
   <p>
     <input type="checkbox" checked="checked" id="forget">Forget this site, too</input>
     <p>
-    <button id="blush" onClick="addon.postMessage('blush');">Yes</button>
+    <button id="blush" onClick="addon.postMessage('blush'); if (document.getElementById('forget').checked) { addon.postMessage('forget'); }">Yes</button>
     <button id="cancel" onClick="addon.postMessage('cancel');">Cancel</button>
   </p>
 </center>
