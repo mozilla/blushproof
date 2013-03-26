@@ -8,5 +8,9 @@
     <button onClick="addon.postMessage('continue');">Use Normal Window</button>
   </p>
 </center>
+<script>
+  // this enables the test harness to act as if a button has been pressed
+  addon.on("message", function(message) { addon.postMessage(message); });
+</script>
 </body>
 </html>
