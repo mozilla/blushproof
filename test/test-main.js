@@ -99,8 +99,9 @@ function testExpectNoConsentPanelWhitelisted() {
  * panel, because we've removed it from the blushlist entirely.
  */
 function testExpectNoConsentPanelNotOnBlushlist() {
-  delete ss.storage.blushlist.map[bpUtil.getHash("localhost")];
-  delete ss.storage.whitelistedDomains["localhost"];
+  let key = bpUtil.getKeyForHost("localhost");
+  delete ss.storage.blushlist.map[key];
+  delete ss.storage.whitelistedDomains[key];
   gAssertObject.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
                       null,
                       "'localhost' should not be on the blushlist");
@@ -116,8 +117,9 @@ function finishTest() {
 }
 
 exports["test main async"] = function(assert, done) {
+  let key = bpUtil.getKeyForHost("localhost");
   assert.pass("async Unit test running!");
-  ss.storage.blushlist.map[bpUtil.getHash("localhost")] = "testing";
+  ss.storage.blushlist.map[key] = "testing";
   assert.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
                "testing",
                "sanity check that putting 'localhost' on the blushlist works");
