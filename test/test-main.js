@@ -17,10 +17,11 @@ let gTests = null;
 
 function runNextTest() {
   let nextTest = gTests.shift();
-  if (nextTest)
+  if (nextTest) {
     nextTest();
-  else
+  } else {
     finishTest();
+  }
 }
 
 /**
@@ -35,9 +36,9 @@ function testExpectConsentPanel() {
   currentBrowser.addEventListener("load",
     function loadListener(event) {
       if (event.target.documentURI == "http://localhost:4444/") {
-        if (!okayToLoad)
+        if (!okayToLoad) {
           gAssertObject.fail("got page load when shouldn't have...");
-        else {
+        } else {
           gAssertObject.pass("got page load when it was okay to");
           currentBrowser.removeEventListener("load", loadListener);
           runNextTest();
@@ -60,14 +61,14 @@ function testExpectConsentPanel() {
   tabs[0].url = "http://localhost:4444/";
   // Using 'currentBrowser.contentWindow.location = "http://localhost:4444/";'
   // somehow bypasses our content policy. I'm guessing it has something to do
-  // with chrome priveleges, but I'm too annoyed with it to figure it out now.
+  // with chrome privileges, but I'm too annoyed with it to figure it out now.
 }
 
 /**
  * The second time we load localhost:4444, we don't expect to see a consent
  * panel, because we whitelisted it in the previous test.
  */
-function testExpectNoConsentPanel1() {
+function testExpectNoConsentPanelWhitelisted() {
   let win = winUtils.getMostRecentBrowserWindow();
   let currentBrowser = win.gBrowser.selectedBrowser;
   currentBrowser.addEventListener("load",
@@ -97,7 +98,7 @@ function testExpectNoConsentPanel1() {
  * The third time we load localhost:4444, we don't expect to see a consent
  * panel, because we've removed it from the blushlist entirely.
  */
-function testExpectNoConsentPanel2() {
+function testExpectNoConsentPanelNotOnBlushlist() {
   delete ss.storage.blushlist.map[bpUtil.getHash("localhost")];
   delete ss.storage.whitelistedDomains["localhost"];
   gAssertObject.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
@@ -105,7 +106,8 @@ function testExpectNoConsentPanel2() {
                       "'localhost' should not be on the blushlist");
   gAssertObject.ok(!ss.storage.whitelistedDomains["localhost"],
                    "'localhost' should not be on the domain whitelist");
-  testExpectNoConsentPanel1();
+  // just sharing code here
+  testExpectNoConsentPanelWhitelisted();
 }
 
 function finishTest() {
@@ -124,8 +126,8 @@ exports["test main async"] = function(assert, done) {
   gDoneFunction = done;
   gAssertObject = assert;
   gTests = [ testExpectConsentPanel,
-             testExpectNoConsentPanel1,
-             testExpectNoConsentPanel2 ];
+             testExpectNoConsentPanelWhitelisted,
+             testExpectNoConsentPanelNotOnBlushlist ];
   runNextTest();
 };
 
