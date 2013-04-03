@@ -1,10 +1,14 @@
 let main = require("main");
 let bpUtil = require("bpUtil");
+let bpUI = require("bpUI");
 let bpCategorizer = require("bpCategorizer");
 let ss = require("simple-storage");
 let winUtils = require("sdk/window/utils");
 let tabs = require("sdk/tabs");
 let { nsHttpServer } = require("sdk/test/httpd");
+let { Cc, Ci, Cu } = require("chrome");
+
+Cu.import("resource://gre/modules/NetUtil.jsm");
 
 let gHttpServer = null;
 // This gets set in the main async test function so we can signal
@@ -115,6 +119,24 @@ function expectOrNotPanelCommon(aURL, aContinuation, aExpectPanel, aDoNav) {
 }
 
 /**
+ * Given a string representing a URI and a callback to call upon completion,
+ * this asks the async history service if the URI has been visited. The
+ * callback takes a single boolean that is true if the URI has been visited.
+ * @param aURIString a string representing a URI
+ * @param aCallback a callback to call upon completion
+ */
+function asyncHaveVisitedURI(aURIString, aCallback) {
+  let uri = NetUtil.newURI(aURIString, null, null);
+  let asyncHistory = Cc["@mozilla.org/browser/history;1"]
+                       .getService(Ci.mozIAsyncHistory);
+  asyncHistory.isURIVisited(uri, function(aURI, aVisitedStatus) {
+    gAssertObject.equal(aURIString, aURI.spec,
+      "sanity check: we got back information about the URI we asked about");
+    aCallback(aVisitedStatus);
+  });
+}
+
+/**
  * The first time we load localhost:4444, we expect to see a consent
  * panel, because it's on the blushlist (we added it for this test under
  * the category "testing").
@@ -157,6 +179,85 @@ function testExpectNoConsentPanelNotOnBlushlist() {
   expectNoConsentPanel("http://localhost:4444/", runNextTest);
 }
 
+function testBlushThis() {
+  // The flow of this test is weird. Basically, go to the end of the function
+  // and see the comment there.
+  let win = winUtils.getMostRecentBrowserWindow();
+
+  // ... and finally this.
+  let blushPanelHiddenListener = function(event) {
+    win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
+    gAssertObject.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
+                        "user",
+                        "sanity check that using Blush This on 'localhost' works");
+    asyncHaveVisitedURI("http://localhost:4444/", function(aVisitedStatus) {
+      gAssertObject.ok(aVisitedStatus, "we didn't clear history - should have http://localhost:4444/ in history");
+      expectConsentPanel("http://localhost:4444/", function(aSuccess, aEvent) {
+        if (aSuccess) {
+          let panel = aEvent.detail;
+          panel.hide();
+        }
+        runNextTest();
+      });
+    });
+  };
+
+  // ... and then this...
+  let blushPanelShownListener = function(event) {
+    win.removeEventListener("BlushPanelShown", blushPanelShownListener);
+    let panel = event.detail;
+    win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
+    panel.postMessage("blush");
+  };
+
+  // This is actually what get executed first...
+  win.addEventListener("BlushPanelShown", blushPanelShownListener);
+  expectNoConsentPanel("http://localhost:4444/", function() {
+    bpUI.blushButton.panel.show();
+  });
+}
+
+function testBlushAndForgetThis() {
+  let key = bpUtil.getKeyForHost("localhost");
+  delete ss.storage.blushlist.map[key];
+
+  let win = winUtils.getMostRecentBrowserWindow();
+
+  let blushPanelHiddenListener = function(event) {
+    win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
+    asyncHaveVisitedURI("http://localhost:4444/", function(aVisitedStatus) {
+      gAssertObject.ok(!aVisitedStatus, "removed site from history: shouldn't be there anymore");
+      gAssertObject.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
+                          "user",
+                          "sanity check that using Blush This on 'localhost' works");
+      expectConsentPanel("http://localhost:4444/", function(aSuccess, aEvent) {
+        if (aSuccess) {
+          let panel = aEvent.detail;
+          panel.hide();
+        }
+        runNextTest();
+      });
+    });
+  };
+
+  let blushPanelShownListener = function(event) {
+    win.removeEventListener("BlushPanelShown", blushPanelShownListener);
+    let panel = event.detail;
+    win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
+    // This is actually the opposite of the order in which data/blushthis.html
+    // performs a blush-and-forget. The test has to do it in this order because
+    // the blush message eventually emits the BlushPanelHidden event, which
+    // is how we progress the test. Maybe we should make these consistent?
+    panel.postMessage("forget");
+    panel.postMessage("blush");
+  };
+
+  win.addEventListener("BlushPanelShown", blushPanelShownListener);
+  expectNoConsentPanel("http://localhost:4444/", function() {
+    bpUI.blushButton.panel.show();
+  });
+}
+
 function finishTest() {
   main.onUnload();
   gHttpServer.stop(gDoneFunction);
@@ -175,7 +276,9 @@ exports["test main async"] = function(assert, done) {
   gAssertObject = assert;
   gTests = [ testExpectConsentPanel,
              testExpectNoConsentPanelWhitelisted,
-             testExpectNoConsentPanelNotOnBlushlist ];
+             testExpectNoConsentPanelNotOnBlushlist,
+             testBlushThis,
+             testBlushAndForgetThis ];
   runNextTest();
 };
 
