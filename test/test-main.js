@@ -6,9 +6,9 @@ let ss = require("simple-storage");
 let winUtils = require("sdk/window/utils");
 let tabs = require("sdk/tabs");
 let { nsHttpServer } = require("sdk/test/httpd");
-let { Cc, Ci, Cu } = require("chrome");
+const { Cc, Ci, Cu } = require("chrome");
 
-Cu.import("resource://gre/modules/NetUtil.jsm");
+const { NetUtil } = Cu.import("resource://gre/modules/NetUtil.jsm", {});
 
 let gHttpServer = null;
 // This gets set in the main async test function so we can signal
@@ -244,10 +244,6 @@ function testBlushAndForgetThis() {
     win.removeEventListener("BlushPanelShown", blushPanelShownListener);
     let panel = event.detail;
     win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
-    // This is actually the opposite of the order in which data/blushthis.html
-    // performs a blush-and-forget. The test has to do it in this order because
-    // the blush message eventually emits the BlushPanelHidden event, which
-    // is how we progress the test. Maybe we should make these consistent?
     panel.postMessage("forget");
     panel.postMessage("blush");
   };
