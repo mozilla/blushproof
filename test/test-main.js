@@ -276,9 +276,6 @@ function testUnblushUserBlushedSite() {
             runNextTest();
           }
         );
-        // When we post this message, we whitelist the third site in the
-        // category "testing". At that point, whitelistme.com (and anything
-        // else in that category) should be considered whitelisted.
         panel.postMessage("continue");
       } else {
         runNextTest();
