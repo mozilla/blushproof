@@ -6,9 +6,13 @@
   <p>
     <input type="checkbox" checked="checked" id="forget">Forget this site, too</input>
     <p>
-    <button id="blush" onClick="addon.postMessage('blush'); if (document.getElementById('forget').checked) { addon.postMessage('forget'); }">Yes</button>
+    <button id="blush" onClick="if (document.getElementById('forget').checked) { addon.postMessage('forget'); } addon.postMessage('blush');">Yes</button>
     <button id="cancel" onClick="addon.postMessage('cancel');">Cancel</button>
   </p>
 </center>
+<script>
+  // this enables the test harness to act as if a button has been pressed
+  addon.on("message", function(message) { addon.postMessage(message); });
+</script>
 </body>
 </html>
