@@ -256,6 +256,37 @@ function testBlushAndForgetThis() {
   });
 }
 
+// In case the function name isn't clear: this test checks that we properly
+// remove a domain from the blushlist if the user used the "Blush This!"
+// button on it.
+function testUnblushUserBlushedSite() {
+  gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
+                      "user",
+                      "localhost should be in category 'user'");
+  expectConsentPanel("http://localhost:4444/",
+    function(aSuccess, aEvent) {
+      if (aSuccess) {
+        let panel = aEvent.detail;
+        expectNoConsentPanelNoNav("http://localhost:4444/",
+          function() {
+            gAssertObject.ok(!bpCategorizer.getCategoryForHost("localhost"),
+                             "localhost should have no category now");
+            gAssertObject.ok(!ss.storage.whitelistedCategories["user"],
+                             "the 'user' category should never be whitelisted");
+            runNextTest();
+          }
+        );
+        // When we post this message, we whitelist the third site in the
+        // category "testing". At that point, whitelistme.com (and anything
+        // else in that category) should be considered whitelisted.
+        panel.postMessage("continue");
+      } else {
+        runNextTest();
+      }
+    }
+  );
+}
+
 function testWhitelistCategoryAfter3DomainsWhitelisted() {
   let key = bpUtil.getKeyForHost("localhost");
   ss.storage.blushlist.map[key] = "testing";
@@ -320,6 +351,7 @@ exports["test main async"] = function(assert, done) {
              testExpectNoConsentPanelNotOnBlushlist,
              testBlushThis,
              testBlushAndForgetThis,
+             testUnblushUserBlushedSite,
              testWhitelistCategoryAfter3DomainsWhitelisted ];
   runNextTest();
 };
