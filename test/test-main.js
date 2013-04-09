@@ -173,7 +173,7 @@ function testExpectNoConsentPanelNotOnBlushlist() {
   // we have to clear these together to keep things consistent
   delete ss.storage.whitelistedDomains[key];
   delete ss.storage.whitelistedCategories["testing"];
-  gAssertObject.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
+  gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
                       null,
                       "'localhost' should not be on the blushlist");
   gAssertObject.ok(!ss.storage.whitelistedDomains["localhost"],
@@ -189,7 +189,7 @@ function testBlushThis() {
   // ... and finally this.
   let blushPanelHiddenListener = function(event) {
     win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
-    gAssertObject.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
+    gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
                         "user",
                         "sanity check that using Blush This on 'localhost' works");
     asyncHaveVisitedURI("http://localhost:4444/", function(aVisitedStatus) {
@@ -229,7 +229,7 @@ function testBlushAndForgetThis() {
     win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
     asyncHaveVisitedURI("http://localhost:4444/", function(aVisitedStatus) {
       gAssertObject.ok(!aVisitedStatus, "removed site from history: shouldn't be there anymore");
-      gAssertObject.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
+      gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
                           "user",
                           "sanity check that using Blush This on 'localhost' works");
       expectConsentPanel("http://localhost:4444/", function(aSuccess, aEvent) {
@@ -308,7 +308,7 @@ exports["test main async"] = function(assert, done) {
   let key = bpUtil.getKeyForHost("localhost");
   assert.pass("async Unit test running!");
   ss.storage.blushlist.map[key] = "testing";
-  assert.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
+  assert.equal(bpCategorizer.getCategoryForHost("localhost"),
                "testing",
                "sanity check that putting 'localhost' on the blushlist works");
   gHttpServer = new nsHttpServer();
