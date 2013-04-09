@@ -170,7 +170,9 @@ function testExpectNoConsentPanelWhitelisted() {
 function testExpectNoConsentPanelNotOnBlushlist() {
   let key = bpUtil.getKeyForHost("localhost");
   delete ss.storage.blushlist.map[key];
+  // we have to clear these together to keep things consistent
   delete ss.storage.whitelistedDomains[key];
+  delete ss.storage.whitelistedCategories["testing"];
   gAssertObject.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
                       null,
                       "'localhost' should not be on the blushlist");
@@ -254,6 +256,49 @@ function testBlushAndForgetThis() {
   });
 }
 
+function testWhitelistCategoryAfter3DomainsWhitelisted() {
+  let key = bpUtil.getKeyForHost("localhost");
+  ss.storage.blushlist.map[key] = "testing";
+  // we have to clear these together to keep things consistent
+  delete ss.storage.whitelistedDomains[key];
+  delete ss.storage.whitelistedCategories["testing"];
+
+  // we're not actually going to visit these sites - we just want them on
+  // the blushlist so we can whitelist them (which we do manually, here)
+  let key = bpUtil.getKeyForHost("example.com");
+  ss.storage.blushlist.map[key] = "testing";
+  bpCategorizer.whitelistHost("example.com");
+  let key = bpUtil.getKeyForHost("other-example.com");
+  ss.storage.blushlist.map[key] = "testing";
+  bpCategorizer.whitelistHost("other-example.com");
+  // we're not whitelisting this site - this is how we see that this
+  // functionality worked
+  let key = bpUtil.getKeyForHost("thirdsite.com");
+  ss.storage.blushlist.map[key] = "testing";
+  gAssertObject.ok(!bpCategorizer.isHostWhitelisted("thirdsite.com"));
+  // only 2 sites in the "testing" category have been whitelisted, so we
+  // expect a consent panel here
+  expectConsentPanel("http://localhost:4444/",
+    function(aSuccess, aEvent) {
+      if (aSuccess) {
+        let panel = aEvent.detail;
+        expectNoConsentPanelNoNav("http://localhost:4444/",
+          function() {
+            gAssertObject.ok(bpCategorizer.isHostWhitelisted("thirdsite.com"));
+            runNextTest();
+          }
+        );
+        // When we post this message, we whitelist the third site in the
+        // category "testing". At that point, whitelistme.com (and anything
+        // else in that category) should be considered whitelisted.
+        panel.postMessage("continue");
+      } else {
+        runNextTest();
+      }
+    }
+  );
+}
+
 function finishTest() {
   main.onUnload();
   gHttpServer.stop(gDoneFunction);
@@ -274,7 +319,8 @@ exports["test main async"] = function(assert, done) {
              testExpectNoConsentPanelWhitelisted,
              testExpectNoConsentPanelNotOnBlushlist,
              testBlushThis,
-             testBlushAndForgetThis ];
+             testBlushAndForgetThis,
+             testWhitelistCategoryAfter3DomainsWhitelisted ];
   runNextTest();
 };
 
