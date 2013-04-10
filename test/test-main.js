@@ -170,8 +170,10 @@ function testExpectNoConsentPanelWhitelisted() {
 function testExpectNoConsentPanelNotOnBlushlist() {
   let key = bpUtil.getKeyForHost("localhost");
   delete ss.storage.blushlist.map[key];
+  // we have to clear these together to keep things consistent
   delete ss.storage.whitelistedDomains[key];
-  gAssertObject.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
+  delete ss.storage.whitelistedCategories["testing"];
+  gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
                       null,
                       "'localhost' should not be on the blushlist");
   gAssertObject.ok(!ss.storage.whitelistedDomains["localhost"],
@@ -187,7 +189,7 @@ function testBlushThis() {
   // ... and finally this.
   let blushPanelHiddenListener = function(event) {
     win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
-    gAssertObject.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
+    gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
                         "user",
                         "sanity check that using Blush This on 'localhost' works");
     asyncHaveVisitedURI("http://localhost:4444/", function(aVisitedStatus) {
@@ -227,7 +229,7 @@ function testBlushAndForgetThis() {
     win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
     asyncHaveVisitedURI("http://localhost:4444/", function(aVisitedStatus) {
       gAssertObject.ok(!aVisitedStatus, "removed site from history: shouldn't be there anymore");
-      gAssertObject.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
+      gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
                           "user",
                           "sanity check that using Blush This on 'localhost' works");
       expectConsentPanel("http://localhost:4444/", function(aSuccess, aEvent) {
@@ -254,6 +256,77 @@ function testBlushAndForgetThis() {
   });
 }
 
+// In case the function name isn't clear: this test checks that we properly
+// remove a domain from the blushlist if the user used the "Blush This!"
+// button on it.
+function testUnblushUserBlushedSite() {
+  gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
+                      "user",
+                      "localhost should be in category 'user'");
+  expectConsentPanel("http://localhost:4444/",
+    function(aSuccess, aEvent) {
+      if (aSuccess) {
+        let panel = aEvent.detail;
+        expectNoConsentPanelNoNav("http://localhost:4444/",
+          function() {
+            gAssertObject.ok(!bpCategorizer.getCategoryForHost("localhost"),
+                             "localhost should have no category now");
+            gAssertObject.ok(!ss.storage.whitelistedCategories["user"],
+                             "the 'user' category should never be whitelisted");
+            runNextTest();
+          }
+        );
+        panel.postMessage("continue");
+      } else {
+        runNextTest();
+      }
+    }
+  );
+}
+
+function testWhitelistCategoryAfter3DomainsWhitelisted() {
+  let key = bpUtil.getKeyForHost("localhost");
+  ss.storage.blushlist.map[key] = "testing";
+  // we have to clear these together to keep things consistent
+  delete ss.storage.whitelistedDomains[key];
+  delete ss.storage.whitelistedCategories["testing"];
+
+  // we're not actually going to visit these sites - we just want them on
+  // the blushlist so we can whitelist them (which we do manually, here)
+  let key = bpUtil.getKeyForHost("example.com");
+  ss.storage.blushlist.map[key] = "testing";
+  bpCategorizer.whitelistHost("example.com");
+  let key = bpUtil.getKeyForHost("other-example.com");
+  ss.storage.blushlist.map[key] = "testing";
+  bpCategorizer.whitelistHost("other-example.com");
+  // we're not whitelisting this site - this is how we see that this
+  // functionality worked
+  let key = bpUtil.getKeyForHost("thirdsite.com");
+  ss.storage.blushlist.map[key] = "testing";
+  gAssertObject.ok(!bpCategorizer.isHostWhitelisted("thirdsite.com"));
+  // only 2 sites in the "testing" category have been whitelisted, so we
+  // expect a consent panel here
+  expectConsentPanel("http://localhost:4444/",
+    function(aSuccess, aEvent) {
+      if (aSuccess) {
+        let panel = aEvent.detail;
+        expectNoConsentPanelNoNav("http://localhost:4444/",
+          function() {
+            gAssertObject.ok(bpCategorizer.isHostWhitelisted("thirdsite.com"));
+            runNextTest();
+          }
+        );
+        // When we post this message, we whitelist the third site in the
+        // category "testing". At that point, whitelistme.com (and anything
+        // else in that category) should be considered whitelisted.
+        panel.postMessage("continue");
+      } else {
+        runNextTest();
+      }
+    }
+  );
+}
+
 function finishTest() {
   main.onUnload();
   gHttpServer.stop(gDoneFunction);
@@ -263,7 +336,7 @@ exports["test main async"] = function(assert, done) {
   let key = bpUtil.getKeyForHost("localhost");
   assert.pass("async Unit test running!");
   ss.storage.blushlist.map[key] = "testing";
-  assert.equal(bpCategorizer.getCategoryForBlushlist("localhost"),
+  assert.equal(bpCategorizer.getCategoryForHost("localhost"),
                "testing",
                "sanity check that putting 'localhost' on the blushlist works");
   gHttpServer = new nsHttpServer();
@@ -274,7 +347,9 @@ exports["test main async"] = function(assert, done) {
              testExpectNoConsentPanelWhitelisted,
              testExpectNoConsentPanelNotOnBlushlist,
              testBlushThis,
-             testBlushAndForgetThis ];
+             testBlushAndForgetThis,
+             testUnblushUserBlushedSite,
+             testWhitelistCategoryAfter3DomainsWhitelisted ];
   runNextTest();
 };
 
