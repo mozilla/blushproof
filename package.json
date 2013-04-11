@@ -9,6 +9,14 @@
   "dependencies": [
     "micropilot"
   ],
+  "preferences": [
+    {
+      "type": "bool",
+      "title": "micropilotlog",
+      "name": "micropilotlog",
+      "value": true
+    }
+  ],
   "volo": {
     "dependencies": {
       "packages/micropilot": "github:gregglind/micropilot/v0.8"
