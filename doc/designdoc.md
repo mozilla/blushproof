@@ -29,7 +29,7 @@ event: {
   // One of "match-query", "match-site", "open-in-pb", "open in regular", "blush-this", "forget-this",
   // "remove-from-blushlist"
   name: string,
-  // Time since epoch in seconds
+  // Time since epoch in seconds, to the nearest hour
   timestamp: uint_64
 }
 </pre>
