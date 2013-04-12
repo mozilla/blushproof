@@ -1,3 +1,5 @@
+"use strict";
+
 let main = require("main");
 let bpUtil = require("bpUtil");
 let bpUI = require("bpUI");
@@ -33,10 +35,8 @@ function runNextTest() {
  * @param expectedContents
  */
 function testMonitor(expectedEvents) {
-  console.log("TEST MONITOR");
   monitor.upload("https://example.com", {simulate: true}).then(
     function checkContents(request) {
-      console.log("CHECK CONTENTS", request.content);
       let events = JSON.parse(request.content).events;
       console.log("EVENTS", JSON.stringify(events));
       gAssertObject.equal(events.length, expectedEvents.length);
@@ -47,8 +47,8 @@ function testMonitor(expectedEvents) {
         gAssertObject.equal(events[i].eventstoreid, i + 1);
       }
     });
-    // I don't understand promises, this is so not working :(
-    // .then(monitor.clear());
+    // This is causing it never to return
+    // yield monitor.clear();
 }
 
 /**
@@ -170,6 +170,7 @@ function testExpectConsentPanel() {
       if (aSuccess) {
         let panel = aEvent.detail;
         expectNoConsentPanelNoNav("http://localhost:4444/", runNextTest);
+        // Don't open in private browsing mode
         panel.postMessage("continue");
         testMonitor([kEvents.BLUSHY_SITE]);
       } else {
@@ -184,10 +185,13 @@ function testExpectConsentPanel() {
  * panel, because we whitelisted it in the previous test.
  */
 function testExpectNoConsentPanelWhitelisted() {
-  expectNoConsentPanel("http://localhost:4444/", runNextTest);
-  testMonitor([kEvents.BLUSHY_SITE,
-               kEvents.OPEN_NORMAL,
-               kEvents.WHITELISTED_SITE]);
+  expectNoConsentPanel("http://localhost:4444/", function() {
+    testMonitor([kEvents.BLUSHY_SITE,
+                 kEvents.OPEN_NORMAL,
+                 kEvents.WHITELISTED_SITE,
+                 kEvents.WHITELISTED_SITE]);
+    runNextTest();
+  });
 }
 
 /**
@@ -197,7 +201,8 @@ function testExpectNoConsentPanelWhitelisted() {
 function testExpectNoConsentPanelNotOnBlushlist() {
   let key = bpUtil.getKeyForHost("localhost");
   delete ss.storage.blushlist.map[key];
-  // we have to clear these together to keep things consistent
+  // We have to clear these together to keep things consistent. This doesn't
+  // seem to be working, we're generating another whitelist event below.
   delete ss.storage.whitelistedDomains[key];
   delete ss.storage.whitelistedCategories["testing"];
   gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
@@ -205,11 +210,13 @@ function testExpectNoConsentPanelNotOnBlushlist() {
                       "'localhost' should not be on the blushlist");
   gAssertObject.ok(!ss.storage.whitelistedDomains["localhost"],
                    "'localhost' should not be on the domain whitelist");
-  expectNoConsentPanel("http://localhost:4444/", runNextTest);
-  testMonitor([kEvents.BLUSHY_SITE,
-               kEvents.OPEN_NORMAL,
-               kEvents.WHITELISTED_SITE,
-               kEvents.WHITELISTED_SITE]);
+  expectNoConsentPanel("http://localhost:4444/", function() {
+    testMonitor([kEvents.BLUSHY_SITE,
+                 kEvents.OPEN_NORMAL,
+                 kEvents.WHITELISTED_SITE,
+                 kEvents.WHITELISTED_SITE]);
+    runNextTest();
+  });
 }
 
 function testBlushThis() {
@@ -229,6 +236,12 @@ function testBlushThis() {
         if (aSuccess) {
           let panel = aEvent.detail;
           panel.hide();
+          testMonitor([kEvents.BLUSHY_SITE,
+                       kEvents.OPEN_NORMAL,
+                       kEvents.WHITELISTED_SITE,
+                       kEvents.WHITELISTED_SITE,
+                       kEvents.ADD_BLUSHLIST,
+                       kEvents.BLUSHY_SITE]);
         }
         runNextTest();
       });
@@ -248,13 +261,10 @@ function testBlushThis() {
   expectNoConsentPanel("http://localhost:4444/", function() {
     bpUI.blushButton.panel.show();
   });
-  testMonitor([kEvents.BLUSHY_SITE,
-               kEvents.OPEN_NORMAL,
-               kEvents.WHITELISTED_SITE,
-               kEvents.WHITELISTED_SITE]);
 }
 
 function testBlushAndForgetThis() {
+  console.log("testBlushAndForgetThis");
   let key = bpUtil.getKeyForHost("localhost");
   delete ss.storage.blushlist.map[key];
 
@@ -271,6 +281,15 @@ function testBlushAndForgetThis() {
         if (aSuccess) {
           let panel = aEvent.detail;
           panel.hide();
+          testMonitor([kEvents.BLUSHY_SITE,
+                       kEvents.OPEN_NORMAL,
+                       kEvents.WHITELISTED_SITE,
+                       kEvents.WHITELISTED_SITE,
+                       kEvents.ADD_BLUSHLIST,
+                       kEvents.BLUSHY_SITE,
+                       kEvents.FORGET_SITE,
+                       kEvents.ADD_BLUSHLIST,
+                       kEvents.BLUSHY_SITE]);
         }
         runNextTest();
       });
@@ -289,18 +308,13 @@ function testBlushAndForgetThis() {
   expectNoConsentPanel("http://localhost:4444/", function() {
     bpUI.blushButton.panel.show();
   });
-  testMonitor([kEvents.BLUSHY_SITE,
-               kEvents.OPEN_NORMAL,
-               kEvents.WHITELISTED_SITE,
-               kEvents.WHITELISTED_SITE,
-               kEvents.ADD_BLUSHLIST,
-               kEvents.BLUSHY_SITE]);
 }
 
 // In case the function name isn't clear: this test checks that we properly
 // remove a domain from the blushlist if the user used the "Blush This!"
 // button on it.
 function testUnblushUserBlushedSite() {
+  console.log("testUnblushUserBlushedSite");
   gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
                       "user",
                       "localhost should be in category 'user'");
@@ -314,6 +328,18 @@ function testUnblushUserBlushedSite() {
                              "localhost should have no category now");
             gAssertObject.ok(!ss.storage.whitelistedCategories["user"],
                              "the 'user' category should never be whitelisted");
+            testMonitor([kEvents.BLUSHY_SITE,
+                         kEvents.OPEN_NORMAL,
+                         kEvents.WHITELISTED_SITE,
+                         kEvents.WHITELISTED_SITE,
+                         kEvents.ADD_BLUSHLIST,
+                         kEvents.BLUSHY_SITE,
+                         kEvents.FORGET_SITE,
+                         kEvents.ADD_BLUSHLIST,
+                         kEvents.BLUSHY_SITE,
+                         kEvents.BLUSHY_SITE,
+                         kEvents.OPEN_NORMAL,
+                         kEvents.WHITELISTED_SITE]);
             runNextTest();
           }
         );
@@ -323,15 +349,6 @@ function testUnblushUserBlushedSite() {
       }
     }
   );
-  testMonitor([kEvents.BLUSHY_SITE,
-               kEvents.OPEN_NORMAL,
-               kEvents.WHITELISTED_SITE,
-               kEvents.WHITELISTED_SITE,
-               kEvents.ADD_BLUSHLIST,
-               kEvents.BLUSHY_SITE,
-               kEvents.FORGET_SITE,
-               kEvents.ADD_BLUSHLIST,
-               kEvents.BLUSHY_SITE]);
 }
 
 function testWhitelistCategoryAfter3DomainsWhitelisted() {
@@ -363,7 +380,20 @@ function testWhitelistCategoryAfter3DomainsWhitelisted() {
         expectNoConsentPanelNoNav("http://localhost:4444/",
           function() {
             gAssertObject.ok(bpCategorizer.isHostWhitelisted("thirdsite.com"));
-            runNextTest();
+            testMonitor([kEvents.BLUSHY_SITE,
+                         kEvents.OPEN_NORMAL,
+                         kEvents.WHITELISTED_SITE,
+                         kEvents.WHITELISTED_SITE,
+                         kEvents.ADD_BLUSHLIST,
+                         kEvents.BLUSHY_SITE,
+                         kEvents.FORGET_SITE,
+                         kEvents.ADD_BLUSHLIST,
+                         kEvents.BLUSHY_SITE,
+                         kEvents.BLUSHY_SITE,
+                         kEvents.OPEN_NORMAL,
+                         kEvents.WHITELISTED_SITE]);
+			 // We should have an event for whitelisted categories
+	    runNextTest();
           }
         );
         // When we post this message, we whitelist the third site in the
@@ -375,18 +405,6 @@ function testWhitelistCategoryAfter3DomainsWhitelisted() {
       }
     }
   );
-  testMonitor([kEvents.BLUSHY_SITE,
-               kEvents.OPEN_NORMAL,
-               kEvents.WHITELISTED_SITE,
-               kEvents.WHITELISTED_SITE,
-               kEvents.ADD_BLUSHLIST,
-               kEvents.BLUSHY_SITE,
-               kEvents.FORGET_SITE,
-               kEvents.ADD_BLUSHLIST,
-               kEvents.BLUSHY_SITE,
-               kEvents.BLUSHY_SITE,
-               kEvents.OPEN_NORMAL,
-               kEvents.WHITELISTED_SITE]);
 }
 
 function finishTest() {
