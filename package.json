@@ -12,9 +12,15 @@
   "preferences": [
     {
       "type": "bool",
-      "title": "micropilotlog",
+      "title": "Enable debug messages",
       "name": "micropilotlog",
       "value": true
+    },
+    {
+      "type": "bool",
+      "title": "Report metrics",
+      "name": "enable_reporting",
+      "value": false
     }
   ],
   "volo": {

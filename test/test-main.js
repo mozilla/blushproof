@@ -2,12 +2,12 @@ let main = require("main");
 let bpUtil = require("bpUtil");
 let bpUI = require("bpUI");
 let bpCategorizer = require("bpCategorizer");
+const { monitor, kEvents } = require("monitor");
 let ss = require("simple-storage");
 let winUtils = require("sdk/window/utils");
 let tabs = require("sdk/tabs");
 let { nsHttpServer } = require("sdk/test/httpd");
 const { Cc, Ci, Cu } = require("chrome");
-
 const { NetUtil } = Cu.import("resource://gre/modules/NetUtil.jsm", {});
 
 let gHttpServer = null;
@@ -26,6 +26,29 @@ function runNextTest() {
   } else {
     finishTest();
   }
+}
+
+/**
+ * Test that we recorded what we expected.
+ * @param expectedContents
+ */
+function testMonitor(expectedEvents) {
+  console.log("TEST MONITOR");
+  monitor.upload("https://example.com", {simulate: true}).then(
+    function checkContents(request) {
+      console.log("CHECK CONTENTS", request.content);
+      let events = JSON.parse(request.content).events;
+      console.log("EVENTS", JSON.stringify(events));
+      gAssertObject.equal(events.length, expectedEvents.length);
+      for (let i = 0; i < events.length; ++i) {
+        // Ignore the timestamp field
+        gAssertObject.equal(events[i].event, expectedEvents[i]);
+        // Micropilot sticks an eventstoreid field on every record
+        gAssertObject.equal(events[i].eventstoreid, i + 1);
+      }
+    });
+    // I don't understand promises, this is so not working :(
+    // .then(monitor.clear());
 }
 
 /**
@@ -148,6 +171,7 @@ function testExpectConsentPanel() {
         let panel = aEvent.detail;
         expectNoConsentPanelNoNav("http://localhost:4444/", runNextTest);
         panel.postMessage("continue");
+        testMonitor([kEvents.BLUSHY_SITE]);
       } else {
         runNextTest();
       }
@@ -161,6 +185,9 @@ function testExpectConsentPanel() {
  */
 function testExpectNoConsentPanelWhitelisted() {
   expectNoConsentPanel("http://localhost:4444/", runNextTest);
+  testMonitor([kEvents.BLUSHY_SITE,
+               kEvents.OPEN_NORMAL,
+               kEvents.WHITELISTED_SITE]);
 }
 
 /**
@@ -179,6 +206,10 @@ function testExpectNoConsentPanelNotOnBlushlist() {
   gAssertObject.ok(!ss.storage.whitelistedDomains["localhost"],
                    "'localhost' should not be on the domain whitelist");
   expectNoConsentPanel("http://localhost:4444/", runNextTest);
+  testMonitor([kEvents.BLUSHY_SITE,
+               kEvents.OPEN_NORMAL,
+               kEvents.WHITELISTED_SITE,
+               kEvents.WHITELISTED_SITE]);
 }
 
 function testBlushThis() {
@@ -217,6 +248,10 @@ function testBlushThis() {
   expectNoConsentPanel("http://localhost:4444/", function() {
     bpUI.blushButton.panel.show();
   });
+  testMonitor([kEvents.BLUSHY_SITE,
+               kEvents.OPEN_NORMAL,
+               kEvents.WHITELISTED_SITE,
+               kEvents.WHITELISTED_SITE]);
 }
 
 function testBlushAndForgetThis() {
@@ -254,6 +289,12 @@ function testBlushAndForgetThis() {
   expectNoConsentPanel("http://localhost:4444/", function() {
     bpUI.blushButton.panel.show();
   });
+  testMonitor([kEvents.BLUSHY_SITE,
+               kEvents.OPEN_NORMAL,
+               kEvents.WHITELISTED_SITE,
+               kEvents.WHITELISTED_SITE,
+               kEvents.ADD_BLUSHLIST,
+               kEvents.BLUSHY_SITE]);
 }
 
 // In case the function name isn't clear: this test checks that we properly
@@ -282,6 +323,15 @@ function testUnblushUserBlushedSite() {
       }
     }
   );
+  testMonitor([kEvents.BLUSHY_SITE,
+               kEvents.OPEN_NORMAL,
+               kEvents.WHITELISTED_SITE,
+               kEvents.WHITELISTED_SITE,
+               kEvents.ADD_BLUSHLIST,
+               kEvents.BLUSHY_SITE,
+               kEvents.FORGET_SITE,
+               kEvents.ADD_BLUSHLIST,
+               kEvents.BLUSHY_SITE]);
 }
 
 function testWhitelistCategoryAfter3DomainsWhitelisted() {
@@ -325,6 +375,18 @@ function testWhitelistCategoryAfter3DomainsWhitelisted() {
       }
     }
   );
+  testMonitor([kEvents.BLUSHY_SITE,
+               kEvents.OPEN_NORMAL,
+               kEvents.WHITELISTED_SITE,
+               kEvents.WHITELISTED_SITE,
+               kEvents.ADD_BLUSHLIST,
+               kEvents.BLUSHY_SITE,
+               kEvents.FORGET_SITE,
+               kEvents.ADD_BLUSHLIST,
+               kEvents.BLUSHY_SITE,
+               kEvents.BLUSHY_SITE,
+               kEvents.OPEN_NORMAL,
+               kEvents.WHITELISTED_SITE]);
 }
 
 function finishTest() {
