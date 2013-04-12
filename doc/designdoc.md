@@ -38,10 +38,10 @@ In addition to this data, Micropilot records metadata such as Firefox version, `
 
 Data that blushproof does not collect
 =====================================
-Any domain information. What about category information? That would be really interesting. We could provide a pref to turn off reporting altogether.
+Any domain information or category information.
 
 Privacy concerns
 ================
-Metrics will be uploaded to an AWS server. Individual user data will be deleted after 1 month. Aggregated data (e.g., volume of query matches over time) will be kept forever and used to refine Blushproof.
+On installation, the privacy policy will be shown, including a description of data that's collected and an option to turn it off. Metrics will be uploaded to an AWS server. Individual user data will be deleted after 1 month. Aggregated data (e.g., volume of query matches over time) will be kept forever and used to refine Blushproof.
 
 [1]: http://github.com/gregglind/micropilot
