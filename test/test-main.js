@@ -4,13 +4,15 @@ let main = require("main");
 let bpUtil = require("bpUtil");
 let bpUI = require("bpUI");
 let bpCategorizer = require("bpCategorizer");
-const { monitor, kEvents } = require("monitor");
+const { recordEvent, monitor, kEvents } = require("monitor");
 let ss = require("simple-storage");
 let winUtils = require("sdk/window/utils");
 let tabs = require("sdk/tabs");
 let { nsHttpServer } = require("sdk/test/httpd");
 const { Cc, Ci, Cu } = require("chrome");
 const { NetUtil } = Cu.import("resource://gre/modules/NetUtil.jsm", {});
+const { defer, resolve, promised } = require("sdk/core/promise");
+const group = function (array) { return promised(Array).apply(null, array); };
 
 let gHttpServer = null;
 // This gets set in the main async test function so we can signal
@@ -31,13 +33,15 @@ function runNextTest() {
 }
 
 /**
- * Test that we recorded what we expected.
+ * Test that we recorded what we expected, then clear the monitor.
  * @param expectedContents
  * @return promise
  */
 function testMonitor(expectedEvents) {
-  monitor.upload("https://example.com", {simulate: true}).then(
+  return monitor.upload("https://example.com", {simulate: true}).then(
     function checkContents(request) {
+      //let { promise, resolve } = defer();
+      var deferred = defer();
       let events = JSON.parse(request.content).events;
       console.log("EVENTS", JSON.stringify(events));
       gAssertObject.equal(events.length, expectedEvents.length);
@@ -47,10 +51,11 @@ function testMonitor(expectedEvents) {
         // Micropilot sticks an eventstoreid field on every record
         gAssertObject.equal(events[i].eventstoreid, i + 1);
       }
-      //return monitor.clear();
-    });
-  // This is causing it never to return
-  //return monitor.clear();
+      console.log("resolving ", JSON.stringify(deferred));
+      //return resolve(true);
+      deferred.resolve(true);
+      return deferred.promise;
+    }); // .then(monitor.clear());
 }
 
 /**
@@ -174,8 +179,8 @@ function testExpectConsentPanel() {
         expectNoConsentPanelNoNav("http://localhost:4444/", function() {
           testMonitor([kEvents.BLUSHY_SITE,
                        kEvents.OPEN_NORMAL,
-                       kEvents.WHITELISTED_SITE]);
-          runNextTest();
+                       kEvents.WHITELISTED_SITE]).then(runNextTest());
+          //runNextTest();
         });
         // Don't open in private browsing mode
         panel.postMessage("continue");
@@ -196,8 +201,7 @@ function testExpectNoConsentPanelWhitelisted() {
     testMonitor([kEvents.BLUSHY_SITE,
                  kEvents.OPEN_NORMAL,
                  kEvents.WHITELISTED_SITE,
-                 kEvents.WHITELISTED_SITE]);
-    runNextTest();
+                 kEvents.WHITELISTED_SITE]).then(runNextTest());
   });
 }
 
@@ -420,6 +424,7 @@ function finishTest() {
 }
 
 exports["test main async"] = function(assert, done) {
+  console.log("test main async");
   let key = bpUtil.getKeyForHost("localhost");
   assert.pass("async Unit test running!");
   ss.storage.blushlist.map[key] = "testing";
