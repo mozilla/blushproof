@@ -14,131 +14,73 @@ const { NetUtil } = Cu.import("resource://gre/modules/NetUtil.jsm", {});
 const { defer, resolve, promised } = require("sdk/core/promise");
 const group = function (array) { return promised(Array).apply(null, array); };
 
-let gHttpServer = null;
-// This gets set in the main async test function so we can signal
-// the test harness that we're done asynchronously.
-let gDoneFunction = null;
-// This gets set in the main async test function so we can note passes
-// and failures to the test harness asynchronously.
-let gAssertObject = null;
-let gTests = null;
-
-function runNextTest() {
-  let nextTest = gTests.shift();
-  if (nextTest) {
-    nextTest();
-  } else {
-    finishTest();
-  }
-}
-
 /**
  * Test that we recorded what we expected, then clear the monitor.
  * @param expectedContents
  * @return promise
  */
-function testMonitor(expectedEvents) {
+function testMonitor(assert, expectedEvents) {
   return monitor.upload("https://example.com", {simulate: true}).then(
     function checkContents(request) {
-      //let { promise, resolve } = defer();
       var deferred = defer();
       let events = JSON.parse(request.content).events;
+      console.log("TEST MONITOR", JSON.stringify(request.content));
       console.log("EVENTS", JSON.stringify(events));
-      gAssertObject.equal(events.length, expectedEvents.length);
+      assert.equal(events.length, expectedEvents.length);
       for (let i = 0; i < events.length; ++i) {
         // Ignore the timestamp field
-        gAssertObject.equal(events[i].event, expectedEvents[i]);
+        assert.equal(events[i].event, expectedEvents[i]);
         // Micropilot sticks an eventstoreid field on every record
-        gAssertObject.equal(events[i].eventstoreid, i + 1);
+        assert.equal(events[i].eventstoreid, i + 1);
       }
-      console.log("resolving ", JSON.stringify(deferred));
-      //return resolve(true);
       deferred.resolve(true);
       return deferred.promise;
     }); // .then(monitor.clear());
 }
 
 /**
- * Given a url and a continuation to call upon completion, this function loads
- * up the url and expects that the consent panel will be shown.
- * @param aURL a string representing a url to load
- * @param aContinuation a function to call upon completion. The function takes
- *        two arguments: a boolean indicating success if true, and the
- *        event spawned by either the page load or consent panel opening.
- */
-function expectConsentPanel(aURL, aContinuation) {
-  expectOrNotPanelCommon(aURL, aContinuation, true, true);
-}
-
-/**
- * Same as expectConsentPanel, except it is expected that the page load
- * succeeds and that no consent panel is shown.
- */
-function expectNoConsentPanel(aURL, aContinuation) {
-  expectOrNotPanelCommon(aURL, aContinuation, false, true);
-}
-
-/**
- * Same as expectNoConsentPanel, except it only sets up the appropriate
- * listeners - no navigation is done. The caller of this function must
- * perform the navigation itself (e.g. by clicking "open anyway" in a
- * previously shown consent panel).
- */
-function expectNoConsentPanelNoNav(aURL, aContinuation) {
-  expectOrNotPanelCommon(aURL, aContinuation, false, false);
-}
-
-/**
- * Common function for expectConsentPanel, expectNoConsentPanel, and
- * expectNoConsentPanelNoNav. Probably shouldn't be called directly (use
- * one of the aforementioned functions).
+ * Returns a promise whose resolution is an event and a message.
  * @param aURL same as previously mentioned functions
- * @param aContinuation same as previously mentioned functions
- * @param aExpectPanel a boolean indicating the panel is expected if true
  * @param aDoNav a boolean indicating the page should be navigated if true
+ * @return promise resolving to the event and a message
  */
-function expectOrNotPanelCommon(aURL, aContinuation, aExpectPanel, aDoNav) {
+function promisePanelOrPage(aURL, aDoNav) {
   let win = winUtils.getMostRecentBrowserWindow();
   let currentBrowser = win.gBrowser.selectedBrowser;
 
-  let loadListener = null;
-  let consentPanelShownListener = null;
+  let deferred = defer();
+  // We resolve the promise with the event and a message
   let current = true;
-
-  loadListener = function(event) {
+  let loadListener = function(event) {
+    console.log("promise uri", event.target.documentURI);
     if (event.target.documentURI == aURL) {
-      currentBrowser.removeEventListener("load", loadListener);
-      win.removeEventListener("ConsentPanelShown", consentPanelShownListener);
       if (!current) {
         return;
       }
-      if (aExpectPanel) {
-        gAssertObject.fail("got page load when we shouldn't have");
-      } else {
-        gAssertObject.pass("got page load when it was okay to");
-      }
       current = false;
-      aContinuation(!aExpectPanel, event);
+      console.log("promise page");
+      cleanUp();
+      deferred.resolve({event: event, message: "page shown"});
     }
   };
 
-  consentPanelShownListener = function(event) {
-    currentBrowser.removeEventListener("load", loadListener);
-    win.removeEventListener("ConsentPanelShown", consentPanelShownListener);
+  let consentPanelShownListener = function(event) {
     if (!current) {
       return;
     }
-    if (aExpectPanel) {
-      gAssertObject.pass("panel shown when we were expecting it");
-    } else {
-      gAssertObject.fail("panel shown when we weren't expecting it");
-    }
     current = false;
-    aContinuation(aExpectPanel, event);
+    console.log("promise panel");
+    cleanUp();
+    deferred.resolve({event: event, message: "panel shown"});
   };
 
   currentBrowser.addEventListener("load", loadListener, true);
   win.addEventListener("ConsentPanelShown", consentPanelShownListener);
+
+  let cleanUp = function() {
+    currentBrowser.removeEventListener("load", loadListener);
+    win.removeEventListener("ConsentPanelShown", consentPanelShownListener);
+  }
 
   // Using 'currentBrowser.contentWindow.location = aURL;'
   // somehow bypasses our content policy. I'm guessing it has something to do
@@ -146,50 +88,69 @@ function expectOrNotPanelCommon(aURL, aContinuation, aExpectPanel, aDoNav) {
   if (aDoNav) {
     tabs[0].url = aURL;
   }
+  return deferred.promise;
+}
+
+function promisePanel(assert, aURL, aDoNav) {
+  return promisePanelOrPage(aURL, aDoNav).
+    then(function(response) {
+      console.log("Promise panel resolved", response.message);
+      let deferred = defer();
+      assert.equal("panel shown", response.message);
+      deferred.resolve(response);
+      return deferred.promise;
+    });
+}
+
+function promisePage(assert, aURL, aDoNav) {
+  return promisePanelOrPage(aURL, aDoNav).
+    then(function(response) {
+      console.log("Promise page resolved", response.message);
+      let deferred = defer();
+      assert.equal("page shown", response.message);
+      deferred.resolve(response);
+      return deferred.promise;
+    });
+}
+
+function postContinuation(response) {
+  let deferred = defer();
+  response.event.detail.postMessage("continue");
+  deferred.resolve(response);
+  return deferred.promise;
+}
+
+/**
+ * Given a url and a continuation to call upon completion, this function loads
+ * up the url and expects that the consent panel will be shown.
+ * @param aURL a string representing a url to load
+ */
+function testExpectConsentPanelThenWhitelist(assert) {
+  const kUrl = "http://localhost:4444/";
+  return promisePanel(assert, kUrl, true).
+    then(function(response) { return postContinuation(response); });
+    then(testMonitor(assert,
+                     [kEvents.BLUSHY_SITE,
+                      kEvents.OPEN_NORMAL,
+                      kEvents.WHITELISTED_SITE])).
+    then(promisePage(assert, kUrl, false));
 }
 
 /**
  * Given a string representing a URI and a callback to call upon completion,
- * this asks the async history service if the URI has been visited. The
- * callback takes a single boolean that is true if the URI has been visited.
+ * this asks the async history service if the URI has been visited.
  * @param aURIString a string representing a URI
- * @param aCallback a callback to call upon completion
+ * @return promise
  */
-function asyncHaveVisitedURI(aURIString, aCallback) {
+function promiseVisitedUri(aURIString) {
+  let deferred = defer();
   let uri = NetUtil.newURI(aURIString, null, null);
   let asyncHistory = Cc["@mozilla.org/browser/history;1"]
                        .getService(Ci.mozIAsyncHistory);
   asyncHistory.isURIVisited(uri, function(aURI, aVisitedStatus) {
-    gAssertObject.equal(aURIString, aURI.spec,
-      "sanity check: we got back information about the URI we asked about");
-    aCallback(aVisitedStatus);
+    deferred.resolve({uri: aURI, status: aVisitedStatus});
   });
-}
-
-/**
- * The first time we load localhost:4444, we expect to see a consent
- * panel, because it's on the blushlist (we added it for this test under
- * the category "testing").
- */
-function testExpectConsentPanel() {
-  expectConsentPanel("http://localhost:4444/",
-    function(aSuccess, aEvent) {
-      if (aSuccess) {
-        let panel = aEvent.detail;
-        expectNoConsentPanelNoNav("http://localhost:4444/", function() {
-          testMonitor([kEvents.BLUSHY_SITE,
-                       kEvents.OPEN_NORMAL,
-                       kEvents.WHITELISTED_SITE]).then(runNextTest());
-          //runNextTest();
-        });
-        // Don't open in private browsing mode
-        panel.postMessage("continue");
-      } else {
-        console.log("testExpectConsentPanel failure?");
-        runNextTest();
-      }
-    }
-  );
+  return deferred.promise;
 }
 
 /**
@@ -418,11 +379,6 @@ function testWhitelistCategoryAfter3DomainsWhitelisted() {
   );
 }
 
-function finishTest() {
-  main.onUnload();
-  gHttpServer.stop(gDoneFunction);
-}
-
 exports["test main async"] = function(assert, done) {
   console.log("test main async");
   let key = bpUtil.getKeyForHost("localhost");
@@ -431,18 +387,27 @@ exports["test main async"] = function(assert, done) {
   assert.equal(bpCategorizer.getCategoryForHost("localhost"),
                "testing",
                "sanity check that putting 'localhost' on the blushlist works");
-  gHttpServer = new nsHttpServer();
-  gHttpServer.start(4444);
-  gDoneFunction = done;
-  gAssertObject = assert;
-  gTests = [ testExpectConsentPanel,
+  let httpServer = new nsHttpServer();
+  httpServer.start(4444);
+  testExpectConsentPanelThenWhitelist(assert).
+  then(function() {
+    console.log("we're done here, right?");
+    main.onUnload();
+    httpServer.stop(done);
+    done()
+  }).
+  then(null, function() {
+    assert.fail("Failed");
+    done();
+  });
+/*
              testExpectNoConsentPanelWhitelisted,
              testExpectNoConsentPanelNotOnBlushlist,
              testBlushThis,
              testBlushAndForgetThis,
              testUnblushUserBlushedSite,
-             testWhitelistCategoryAfter3DomainsWhitelisted ];
-  runNextTest();
+             testWhitelistCategoryAfter3DomainsWhitelisted
+*/
 };
 
 /**
@@ -450,4 +415,4 @@ exports["test main async"] = function(assert, done) {
  * run our tests.
  */
 main.main();
-require("test").run(exports);
+require("sdk/test").run(exports);
