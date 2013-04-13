@@ -33,6 +33,7 @@ function runNextTest() {
 /**
  * Test that we recorded what we expected.
  * @param expectedContents
+ * @return promise
  */
 function testMonitor(expectedEvents) {
   monitor.upload("https://example.com", {simulate: true}).then(
@@ -46,9 +47,10 @@ function testMonitor(expectedEvents) {
         // Micropilot sticks an eventstoreid field on every record
         gAssertObject.equal(events[i].eventstoreid, i + 1);
       }
+      //return monitor.clear();
     });
-    // This is causing it never to return
-    // yield monitor.clear();
+  // This is causing it never to return
+  //return monitor.clear();
 }
 
 /**
@@ -169,11 +171,16 @@ function testExpectConsentPanel() {
     function(aSuccess, aEvent) {
       if (aSuccess) {
         let panel = aEvent.detail;
-        expectNoConsentPanelNoNav("http://localhost:4444/", runNextTest);
+        expectNoConsentPanelNoNav("http://localhost:4444/", function() {
+          testMonitor([kEvents.BLUSHY_SITE,
+                       kEvents.OPEN_NORMAL,
+                       kEvents.WHITELISTED_SITE]);
+          runNextTest();
+        });
         // Don't open in private browsing mode
         panel.postMessage("continue");
-        testMonitor([kEvents.BLUSHY_SITE]);
       } else {
+        console.log("testExpectConsentPanel failure?");
         runNextTest();
       }
     }
@@ -201,8 +208,7 @@ function testExpectNoConsentPanelWhitelisted() {
 function testExpectNoConsentPanelNotOnBlushlist() {
   let key = bpUtil.getKeyForHost("localhost");
   delete ss.storage.blushlist.map[key];
-  // We have to clear these together to keep things consistent. This doesn't
-  // seem to be working, we're generating another whitelist event below.
+  // We have to clear these together to keep things consistent.
   delete ss.storage.whitelistedDomains[key];
   delete ss.storage.whitelistedCategories["testing"];
   gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
@@ -211,6 +217,7 @@ function testExpectNoConsentPanelNotOnBlushlist() {
   gAssertObject.ok(!ss.storage.whitelistedDomains["localhost"],
                    "'localhost' should not be on the domain whitelist");
   expectNoConsentPanel("http://localhost:4444/", function() {
+    // No new events are recorded
     testMonitor([kEvents.BLUSHY_SITE,
                  kEvents.OPEN_NORMAL,
                  kEvents.WHITELISTED_SITE,
