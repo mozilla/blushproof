@@ -187,39 +187,39 @@ function promiseVisitedUri(assert, aURIString) {
   return deferred.promise;
 }
 
+function promiseBlushHidden(win) {
+  let deferred = defer();
+  let blushPanelHiddenListener = function(event) {
+    win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
+    deferred.resolve();
+  }
+  win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
+  return deferred.promise;
+}
+
+function promiseBlushButton(win, aForget) {
+  let deferred = defer();
+  bpUI.blushButton.panel.show();
+  let blushPanelShownListener = function(event) {
+    console.log("pushing blush button");
+    win.removeEventListener("BlushPanelShown", blushPanelShownListener);
+    event.detail.postMessage("blush");
+    if (aForget) {
+      event.detail.postMessage("forget");
+    }
+    deferred.resolve();
+  };
+  win.addEventListener("BlushPanelShown", blushPanelShownListener);
+  return deferred.promise;
+}
+
 function testBlushThis(assert) {
   console.log("testBlushThis");
   let win = winUtils.getMostRecentBrowserWindow();
-  let promiseBlushHidden = function() {
-    let deferred = defer();
-    let blushPanelHiddenListener = function(event) {
-      win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
-      assert.equal(bpCategorizer.getCategoryForHost("localhost"),
-                   "user",
-                   "check using Blush This on 'localhost' works");
-      deferred.resolve();
-    }
-    win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
-    return deferred.promise;
-  }
-
-
-  function promiseBlushButton() {
-    let deferred = defer();
-    bpUI.blushButton.panel.show();
-    let blushPanelShownListener = function(event) {
-      console.log("pushing blush button");
-      win.removeEventListener("BlushPanelShown", blushPanelShownListener);
-      event.detail.postMessage("blush");
-      deferred.resolve();
-    };
-    win.addEventListener("BlushPanelShown", blushPanelShownListener);
-    return deferred.promise;
-  }
 
   return promisePage(assert, kUrl, true).
-    then(promiseBlushButton).
-    then(promiseBlushHidden).
+    then(function() { return promiseBlushButton(win); }).
+    then(function() { return promiseBlushHidden(win, false); }).
     then(function() { return promiseVisitedUri(assert, kUrl); }).
     then(function(aVisited) {
       assert.ok(aVisited);
@@ -398,11 +398,11 @@ exports["test main async"] = function(assert, done) {
                "sanity check that putting 'localhost' on the blushlist works");
   let httpServer = new nsHttpServer();
   httpServer.start(4444);
+    //then(function() { return testBlushAndForgetThis(assert); }).
   testExpectConsentPanelThenWhitelist(assert).
     then(function() { return testExpectNoConsentPanelWhitelisted(assert); }).
     then(function() { return testExpectNoConsentPanelNotOnBlushlist(assert); }).
     then(function() { return testBlushThis(assert); }).
-    then(function() { return testBlushAndForgetThis(assert); }).
     then(function() {
       console.log("we're done here, right?");
       main.onUnload();
