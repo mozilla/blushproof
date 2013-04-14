@@ -299,7 +299,7 @@ function testUnblushUserBlushedSite(assert) {
     });
 }
 
-function testWhitelistCategoryAfter3DomainsWhitelisted() {
+function testWhitelistCategory(assert) {
   let key = bpUtil.getKeyForHost("localhost");
   ss.storage.blushlist.map[key] = "testing";
   // we have to clear these together to keep things consistent
@@ -318,17 +318,20 @@ function testWhitelistCategoryAfter3DomainsWhitelisted() {
   // functionality worked
   let key = bpUtil.getKeyForHost("thirdsite.com");
   ss.storage.blushlist.map[key] = "testing";
-  gAssertObject.ok(!bpCategorizer.isHostWhitelisted("thirdsite.com"));
+  assert.ok(!bpCategorizer.isHostWhitelisted("thirdsite.com"));
   // only 2 sites in the "testing" category have been whitelisted, so we
   // expect a consent panel here
-  expectConsentPanel("http://localhost:4444/",
-    function(aSuccess, aEvent) {
-      if (aSuccess) {
-        let panel = aEvent.detail;
-        expectNoConsentPanelNoNav("http://localhost:4444/",
-          function() {
-            gAssertObject.ok(bpCategorizer.isHostWhitelisted("thirdsite.com"));
-            testMonitor([kEvents.BLUSHY_SITE,
+  console.log("testWhitelistCategory");
+  return promisePanel(assert, kUrl, true).
+    then(function(response) {
+      assert.equal(response.message, "panel shown");
+      return postContinuation(response);
+    }).
+    then(function() { return promisePage(assert, kUrl, false); }).
+    then(function() {
+      console.log("last one, baby!");
+      assert.ok(bpCategorizer.isHostWhitelisted("thirdsite.com"));
+      return testMonitor(assert, [kEvents.BLUSHY_SITE,
                          kEvents.OPEN_NORMAL,
                          kEvents.WHITELISTED_SITE,
                          kEvents.WHITELISTED_SITE,
@@ -339,20 +342,12 @@ function testWhitelistCategoryAfter3DomainsWhitelisted() {
                          kEvents.BLUSHY_SITE,
                          kEvents.BLUSHY_SITE,
                          kEvents.OPEN_NORMAL,
-                         kEvents.WHITELISTED_SITE]);
-			 // We should have an event for whitelisted categories
-	    runNextTest();
-          }
-        );
-        // When we post this message, we whitelist the third site in the
-        // category "testing". At that point, whitelistme.com (and anything
-        // else in that category) should be considered whitelisted.
-        panel.postMessage("continue");
-      } else {
-        runNextTest();
-      }
-    }
-  );
+                         kEvents.WHITELISTED_SITE,
+                         kEvents.BLUSHY_SITE,
+                         kEvents.OPEN_NORMAL,
+                         kEvents.WHITELISTED_SITE,
+         ]);
+    });
 }
 
 exports["test main async"] = function(assert, done) {
@@ -371,6 +366,7 @@ exports["test main async"] = function(assert, done) {
     then(function() { return testBlushThis(assert); }).
     then(function() { return testBlushAndForgetThis(assert); }).
     then(function() { return testUnblushUserBlushedSite(assert); }).
+    then(function() { return testWhitelistCategory(assert); }).
     then(function() {
       console.log("we're done here, right?");
       main.onUnload();
@@ -381,9 +377,6 @@ exports["test main async"] = function(assert, done) {
       assert.fail("Failed");
       done();
     });
-/*
-             testWhitelistCategoryAfter3DomainsWhitelisted
-*/
 };
 
 /**
