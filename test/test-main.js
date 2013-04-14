@@ -203,10 +203,10 @@ function promiseBlushButton(win, aForget) {
   let blushPanelShownListener = function(event) {
     console.log("pushing blush button");
     win.removeEventListener("BlushPanelShown", blushPanelShownListener);
-    event.detail.postMessage("blush");
     if (aForget) {
       event.detail.postMessage("forget");
     }
+    event.detail.postMessage("blush");
     deferred.resolve();
   };
   win.addEventListener("BlushPanelShown", blushPanelShownListener);
@@ -218,8 +218,8 @@ function testBlushThis(assert) {
   let win = winUtils.getMostRecentBrowserWindow();
 
   return promisePage(assert, kUrl, true).
-    then(function() { return promiseBlushButton(win); }).
-    then(function() { return promiseBlushHidden(win, false); }).
+    then(function() { return promiseBlushButton(win, false); }).
+    then(function() { return promiseBlushHidden(win); }).
     then(function() { return promiseVisitedUri(assert, kUrl); }).
     then(function(aVisited) {
       assert.ok(aVisited);
@@ -242,8 +242,8 @@ function testBlushAndForgetThis(assert) {
   let win = winUtils.getMostRecentBrowserWindow();
   console.log("testBlushAndForgetThis");
   return promisePage(assert, kUrl, true).
-    then(function() { return promiseBlushButton(win); }).
-    then(function() { return promiseBlushHidden(win, true); }).
+    then(function() { return promiseBlushButton(win, true); }).
+    then(function() { return promiseBlushHidden(win); }).
     then(function() { return promiseVisitedUri(assert, kUrl); }).
     then(function(aVisited) {
       console.log("visited status", aVisited);
@@ -258,6 +258,7 @@ function testBlushAndForgetThis(assert) {
          kEvents.WHITELISTED_SITE,
          kEvents.ADD_BLUSHLIST,
          kEvents.BLUSHY_SITE,
+         kEvents.FORGET_SITE,
          kEvents.ADD_BLUSHLIST,
          kEvents.BLUSHY_SITE]);
     });
@@ -266,22 +267,24 @@ function testBlushAndForgetThis(assert) {
 // In case the function name isn't clear: this test checks that we properly
 // remove a domain from the blushlist if the user used the "Blush This!"
 // button on it.
-function testUnblushUserBlushedSite() {
+function testUnblushUserBlushedSite(assert) {
   console.log("testUnblushUserBlushedSite");
-  gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
+  assert.equal(bpCategorizer.getCategoryForHost("localhost"),
                       "user",
                       "localhost should be in category 'user'");
-  expectConsentPanel("http://localhost:4444/",
-    function(aSuccess, aEvent) {
-      if (aSuccess) {
-        let panel = aEvent.detail;
-        expectNoConsentPanelNoNav("http://localhost:4444/",
-          function() {
-            gAssertObject.ok(!bpCategorizer.getCategoryForHost("localhost"),
-                             "localhost should have no category now");
-            gAssertObject.ok(!ss.storage.whitelistedCategories["user"],
-                             "the 'user' category should never be whitelisted");
-            testMonitor([kEvents.BLUSHY_SITE,
+  return promisePanel(assert, kUrl, true).
+    then(function(response) {
+      assert.equal(response.message, "panel shown");
+      return postContinuation(response);
+    }).
+    then(function() {
+      assert.ok(!bpCategorizer.getCategoryForHost("localhost"),
+                "localhost should have no category now");
+      assert.ok(!ss.storage.whitelistedCategories["user"],
+                "the 'user' category should never be whitelisted");
+      return promisePage(assert, kUrl, false); }).
+    then(function() { return testMonitor(assert,
+                        [kEvents.BLUSHY_SITE,
                          kEvents.OPEN_NORMAL,
                          kEvents.WHITELISTED_SITE,
                          kEvents.WHITELISTED_SITE,
@@ -293,15 +296,7 @@ function testUnblushUserBlushedSite() {
                          kEvents.BLUSHY_SITE,
                          kEvents.OPEN_NORMAL,
                          kEvents.WHITELISTED_SITE]);
-            runNextTest();
-          }
-        );
-        panel.postMessage("continue");
-      } else {
-        runNextTest();
-      }
-    }
-  );
+    });
 }
 
 function testWhitelistCategoryAfter3DomainsWhitelisted() {
@@ -375,6 +370,7 @@ exports["test main async"] = function(assert, done) {
     then(function() { return testExpectNoConsentPanelNotOnBlushlist(assert); }).
     then(function() { return testBlushThis(assert); }).
     then(function() { return testBlushAndForgetThis(assert); }).
+    then(function() { return testUnblushUserBlushedSite(assert); }).
     then(function() {
       console.log("we're done here, right?");
       main.onUnload();
@@ -386,7 +382,6 @@ exports["test main async"] = function(assert, done) {
       done();
     });
 /*
-             testUnblushUserBlushedSite,
              testWhitelistCategoryAfter3DomainsWhitelisted
 */
 };
