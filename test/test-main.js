@@ -277,13 +277,13 @@ function testUnblushUserBlushedSite(assert) {
       assert.equal(response.message, "panel shown");
       return postContinuation(response);
     }).
+    then(function() { return promisePage(assert, kUrl, false); }).
     then(function() {
       assert.ok(!bpCategorizer.getCategoryForHost("localhost"),
                 "localhost should have no category now");
       assert.ok(!ss.storage.whitelistedCategories["user"],
                 "the 'user' category should never be whitelisted");
-      return promisePage(assert, kUrl, false); }).
-    then(function() { return testMonitor(assert,
+      return testMonitor(assert,
                         [kEvents.BLUSHY_SITE,
                          kEvents.OPEN_NORMAL,
                          kEvents.WHITELISTED_SITE,
