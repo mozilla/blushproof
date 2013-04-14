@@ -218,7 +218,7 @@ function testBlushThis() {
     then(function() { return maybePushBlushButton(win, false); }).
     then(function() { return isURIVisited(gUrl); }).
     then(function(aVisited) {
-      gAssert.ok(aVisited);
+      gAssert.ok(aVisited, "We should have this in our history");
       return maybeShowConsentPanel(gUrl, true); }).
     then(function(response) {
       response.event.detail.hide();
@@ -241,7 +241,7 @@ function testBlushAndForgetThis() {
     then(function() { return maybePushBlushButton(win, true); }).
     then(function() { return isURIVisited(gUrl); }).
     then(function(aVisited) {
-      console.log("visited status", aVisited);
+      gAssert.ok(!aVisited, "We should have cleared this from our history");
       return maybeShowConsentPanel(gUrl, true);
     }).
     then(function(response) {
