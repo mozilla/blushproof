@@ -75,6 +75,7 @@ function promisePanel(assert, aURL, aDoNav) {
  * @return promise resolving to the event and a message
  */
 function promisePage(assert, aURL, aDoNav) {
+  console.log("promised page");
   let win = winUtils.getMostRecentBrowserWindow();
   let currentBrowser = win.gBrowser.selectedBrowser;
 
@@ -83,6 +84,7 @@ function promisePage(assert, aURL, aDoNav) {
   let loadListener = null;
   loadListener = function(event) {
     if (event.target.documentURI == aURL) {
+      console.log("Got promised url", aURL);
       assert.pass("Got promised url", aURL);
       currentBrowser.removeEventListener("load", loadListener);
       deferred.resolve({event: event, message: "page shown"});
@@ -180,8 +182,7 @@ function promiseVisitedUri(assert, aURIString) {
                        .getService(Ci.mozIAsyncHistory);
   asyncHistory.isURIVisited(uri, function(aURI, aVisitedStatus) {
     assert.equal(uri, aURI);
-    assert.ok(aVisitedStatus);
-    deferred.resolve();
+    deferred.resolve(aVisitedStatus);
   });
   return deferred.promise;
 }
@@ -220,7 +221,9 @@ function testBlushThis(assert) {
     then(promiseBlushButton).
     then(promiseBlushHidden).
     then(function() { return promiseVisitedUri(assert, kUrl); }).
-    then(function() { return promisePanel(assert, kUrl, true); }).
+    then(function(aVisited) {
+      assert.ok(aVisited);
+      return promisePanel(assert, kUrl, true); }).
     then(function(response) {
       response.event.detail.hide();
       return testMonitor(assert, 
@@ -233,51 +236,59 @@ function testBlushThis(assert) {
     });
 }
 
-function testBlushAndForgetThis() {
-  console.log("testBlushAndForgetThis");
+function testBlushAndForgetThis(assert) {
   let key = bpUtil.getKeyForHost("localhost");
   delete ss.storage.blushlist.map[key];
-
-  let win = winUtils.getMostRecentBrowserWindow();
-
-  let blushPanelHiddenListener = function(event) {
-    win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
-    asyncHaveVisitedURI("http://localhost:4444/", function(aVisitedStatus) {
-      gAssertObject.ok(!aVisitedStatus, "removed site from history: shouldn't be there anymore");
-      gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
-                          "user",
-                          "sanity check that using Blush This on 'localhost' works");
-      expectConsentPanel("http://localhost:4444/", function(aSuccess, aEvent) {
-        if (aSuccess) {
-          let panel = aEvent.detail;
-          panel.hide();
-          testMonitor([kEvents.BLUSHY_SITE,
-                       kEvents.OPEN_NORMAL,
-                       kEvents.WHITELISTED_SITE,
-                       kEvents.WHITELISTED_SITE,
-                       kEvents.ADD_BLUSHLIST,
-                       kEvents.BLUSHY_SITE,
-                       kEvents.FORGET_SITE,
-                       kEvents.ADD_BLUSHLIST,
-                       kEvents.BLUSHY_SITE]);
-        }
-        runNextTest();
-      });
-    });
-  };
-
-  let blushPanelShownListener = function(event) {
-    win.removeEventListener("BlushPanelShown", blushPanelShownListener);
-    let panel = event.detail;
+  let promiseBlushHidden = function() {
+    let deferred = defer();
+    let blushPanelHiddenListener = function(event) {
+      win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
+      assert.equal(bpCategorizer.getCategoryForHost("localhost"),
+                   "user",
+                   "check using Blush This on 'localhost' works");
+      deferred.resolve(true);
+    }
     win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
-    panel.postMessage("forget");
-    panel.postMessage("blush");
-  };
+    return deferred.promise;
+  }
 
-  win.addEventListener("BlushPanelShown", blushPanelShownListener);
-  expectNoConsentPanel("http://localhost:4444/", function() {
+
+  let promiseBlushButton = function() {
+    let deferred = defer();
     bpUI.blushButton.panel.show();
-  });
+    let blushPanelShownListener = function(event) {
+      console.log("pushing blush and forget button");
+      win.removeEventListener("BlushPanelShown", blushPanelShownListener);
+      event.detail.postMessage("blush");
+      event.detail.postMessage("forget");
+      deferred.resolve(true);
+    };
+    win.addEventListener("BlushPanelShown", blushPanelShownListener);
+    return deferred.promise;
+  }
+
+  console.log("testBlushAndForgetThis");
+  return promisePage(assert, kUrl, true);/*.
+    then(promiseBlushButton).
+    then(promiseBlushHidden).
+    then(function() { console.log("here");return promiseVisitedUri(assert, kUrl); }).
+    then(function(aVisited) {
+      assert.ok(!aVisited);
+      return promisePanel(assert, kUrl, true);
+    }).
+    then(function(response) {
+      response.event.detail.hide();
+      return testMonitor(assert, 
+        [kEvents.BLUSHY_SITE,
+         kEvents.OPEN_NORMAL,
+         kEvents.WHITELISTED_SITE,
+         kEvents.WHITELISTED_SITE,
+         kEvents.ADD_BLUSHLIST,
+         kEvents.BLUSHY_SITE,
+         kEvents.ADD_BLUSHLIST,
+         kEvents.BLUSHY_SITE]);
+    });
+*/
 }
 
 // In case the function name isn't clear: this test checks that we properly
@@ -391,6 +402,7 @@ exports["test main async"] = function(assert, done) {
     then(function() { return testExpectNoConsentPanelWhitelisted(assert); }).
     then(function() { return testExpectNoConsentPanelNotOnBlushlist(assert); }).
     then(function() { return testBlushThis(assert); }).
+    then(function() { return testBlushAndForgetThis(assert); }).
     then(function() {
       console.log("we're done here, right?");
       main.onUnload();
@@ -402,7 +414,6 @@ exports["test main async"] = function(assert, done) {
       done();
     });
 /*
-             testBlushAndForgetThis,
              testUnblushUserBlushedSite,
              testWhitelistCategoryAfter3DomainsWhitelisted
 */
