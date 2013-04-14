@@ -22,8 +22,8 @@ let gEvents = [];
 let gAssert = null;
 
 /**
- * Test that we recorded what we expected, then clear the monitor.
- * @return promise
+ * Returns a promise that resolves when we recorded what we expected, then
+ * clear the monitor.
  */
 function testMonitor() {
   return monitor.upload("http://example.com", { simulate: true }).
@@ -48,7 +48,7 @@ function testMonitor() {
 }
 
 /**
- * Maybe navigate to aURL and show the consent panel.
+ * Resolves when we (optionally) navigate to aURL and show the consent panel.
  * @param aURL The URL to navigate to.
  * @param aDoNav a boolean indicating the page should be navigated if true
  * @return promise resolving to the event and a message
@@ -75,7 +75,7 @@ function maybeShowConsentPanel(aURL, aDoNav) {
 }
 
 /**
- * Maybe navigate to aURL and load the page.
+ * Resolves when we (optionally) navigate to a URL and load the page.
  * @param aURL The URL to navigate to.
  * @param aDoNav a boolean indicating the page should be navigated if true
  * @return promise resolving to the event and a message
@@ -128,25 +128,13 @@ function isURIVisited(aURIString) {
 }
 
 /**
- * Returns a promise that resolves when the blush panel is hidden.
- */
-function maybeHideBlushPanel(win) {
-  let deferred = defer();
-  let blushPanelHiddenListener = function(event) {
-    win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
-    deferred.resolve();
-  }
-  win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
-  return deferred.promise;
-}
-
-/**
  * Returns a promise that resolves when the blush panel is shown and the button
- * is pushed.
+ * is pushed, and the panel is hidden.
  */
 function maybePushBlushButton(win, aForget) {
   let deferred = defer();
   bpUI.blushButton.panel.show();
+
   let blushPanelShownListener = function(event) {
     console.log("pushing blush button");
     win.removeEventListener("BlushPanelShown", blushPanelShownListener);
@@ -154,8 +142,14 @@ function maybePushBlushButton(win, aForget) {
       event.detail.postMessage("forget");
     }
     event.detail.postMessage("blush");
-    deferred.resolve();
   };
+
+  let blushPanelHiddenListener = function(event) {
+    win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
+    deferred.resolve();
+  }
+
+  win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
   win.addEventListener("BlushPanelShown", blushPanelShownListener);
   return deferred.promise;
 }
@@ -222,7 +216,6 @@ function testBlushThis() {
   gEvents = gEvents.concat([kEvents.ADD_BLUSHLIST, kEvents.BLUSHY_SITE]);
   return maybeShowPage(gUrl, true).
     then(function() { return maybePushBlushButton(win, false); }).
-    then(function() { return maybeHideBlushPanel(win); }).
     then(function() { return isURIVisited(gUrl); }).
     then(function(aVisited) {
       gAssert.ok(aVisited);
@@ -246,7 +239,6 @@ function testBlushAndForgetThis() {
                             kEvents.BLUSHY_SITE]);
   return maybeShowPage(gUrl, true).
     then(function() { return maybePushBlushButton(win, true); }).
-    then(function() { return maybeHideBlushPanel(win); }).
     then(function() { return isURIVisited(gUrl); }).
     then(function(aVisited) {
       console.log("visited status", aVisited);
@@ -257,8 +249,8 @@ function testBlushAndForgetThis() {
       return testMonitor(); });
 }
 
-// This test checks that we properly remove a domain from the blushlist if the
-// user used the "Blush This!" button on it.
+// Tests that we properly remove a domain from the blushlist if the user used
+// the "Blush This!" button on it.
 function testUnblushUserBlushedSite() {
   console.log("testUnblushUserBlushedSite");
   gAssert.equal(bpCategorizer.getCategoryForHost("localhost"),
