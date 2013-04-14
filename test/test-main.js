@@ -14,6 +14,7 @@ const { NetUtil } = Cu.import("resource://gre/modules/NetUtil.jsm", {});
 const { defer, resolve, promised } = require("sdk/core/promise");
 const group = function (array) { return promised(Array).apply(null, array); };
 const kUrl = "http://localhost:4444/";
+let gEvents = [];
 
 /**
  * Test that we recorded what we expected, then clear the monitor.
@@ -21,12 +22,11 @@ const kUrl = "http://localhost:4444/";
  * @return promise
  */
 function testMonitor(assert, expectedEvents) {
-  console.log("trying to call test monitor");
-  return monitor.upload("https://example.com", {simulate: true}).then(
-    function checkContents(request) {
+  //return monitor.upload("http://example.com", { simulate: true }).
+  return monitor.upload("http://example.com", { simulate: true }).
+    then(function checkContents(request) {
       var deferred = defer();
       let events = JSON.parse(request.content).events;
-      //console.log("TEST MONITOR", JSON.stringify(request.content));
       console.log("EVENTS", JSON.stringify(events));
       console.log("EXPECTED EVENTS", JSON.stringify(expectedEvents));
       assert.equal(events.length, expectedEvents.length);
@@ -38,7 +38,10 @@ function testMonitor(assert, expectedEvents) {
       }
       deferred.resolve(true);
       return deferred.promise;
-    });//.then(monitor.clear);
+    }).
+    // This clear is not working.
+    // then(monitor.clear).
+    then(null, function() { console.log("couldn't clear"); });
 }
 
 /**
@@ -47,7 +50,7 @@ function testMonitor(assert, expectedEvents) {
  * @param aDoNav a boolean indicating the page should be navigated if true
  * @return promise resolving to the event and a message
  */
-function promisePanel(assert, aURL, aDoNav) {
+function maybeShowPanel(assert, aURL, aDoNav) {
   let win = winUtils.getMostRecentBrowserWindow();
   let deferred = defer();
   let consentPanelShownListener = null;
@@ -74,8 +77,7 @@ function promisePanel(assert, aURL, aDoNav) {
  * @param aDoNav a boolean indicating the page should be navigated if true
  * @return promise resolving to the event and a message
  */
-function promisePage(assert, aURL, aDoNav) {
-  console.log("promised page");
+function maybeShowPage(assert, aURL, aDoNav) {
   let win = winUtils.getMostRecentBrowserWindow();
   let currentBrowser = win.gBrowser.selectedBrowser;
 
@@ -84,7 +86,6 @@ function promisePage(assert, aURL, aDoNav) {
   let loadListener = null;
   loadListener = function(event) {
     if (event.target.documentURI == aURL) {
-      console.log("Got promised url", aURL);
       assert.pass("Got promised url", aURL);
       currentBrowser.removeEventListener("load", loadListener);
       deferred.resolve({event: event, message: "page shown"});
@@ -102,11 +103,9 @@ function promisePage(assert, aURL, aDoNav) {
   return deferred.promise;
 }
 
-function postContinuation(response) {
-  let deferred = defer();
-  response.event.detail.postMessage("continue");
-  deferred.resolve(response);
-  return deferred.promise;
+function openInNormalWindow(response) {
+  // TODO: This should resolve only when the post message has been processed
+  return resolve(response.event.detail.postMessage("continue"));
 }
 
 /**
@@ -116,17 +115,13 @@ function postContinuation(response) {
  */
 function testExpectConsentPanelThenWhitelist(assert) {
   console.log("testExpectConsentPanelThenWhitelist");
-  return promisePanel(assert, kUrl, true).
-    then(function(response) {
-      assert.equal(response.message, "panel shown");
-      return postContinuation(response);
-    }).
-    then(function() { return promisePage(assert, kUrl, false); }).
-    then(function() { return testMonitor(assert,
-                     [kEvents.BLUSHY_SITE,
-                      kEvents.OPEN_NORMAL,
-                      kEvents.WHITELISTED_SITE]);
-    });
+  gEvents = [kEvents.BLUSHY_SITE,
+             kEvents.OPEN_NORMAL,
+             kEvents.WHITELISTED_SITE];
+  return maybeShowPanel(assert, kUrl, true).
+    then(openInNormalWindow).
+    then(function() { return maybeShowPage(assert, kUrl, false); }).
+    then(function() { return testMonitor(assert, gEvents); });
 }
 
 /**
@@ -141,13 +136,9 @@ function testExpectConsentPanelThenWhitelist(assert) {
  */
 function testExpectNoConsentPanelWhitelisted(assert) {
   console.log("testExpectConsentPanelThenWhitelist");
-  return promisePage(assert, kUrl, true).
-    then(function() { return testMonitor(assert,
-                     [kEvents.BLUSHY_SITE,
-                      kEvents.OPEN_NORMAL,
-                      kEvents.WHITELISTED_SITE,
-                      kEvents.WHITELISTED_SITE]);
-  });
+  gEvents.push(kEvents.WHITELISTED_SITE);
+  return maybeShowPage(assert, kUrl, true).
+    then(function() { return testMonitor(assert, gEvents); });
 }
 
 /**
@@ -166,13 +157,8 @@ function testExpectNoConsentPanelNotOnBlushlist(assert) {
   assert.ok(!ss.storage.whitelistedDomains["localhost"],
                    "'localhost' should not be on the domain whitelist");
   // No new events
-  return promisePage(assert, kUrl, true).
-    then(function() { return testMonitor(assert,
-                     [kEvents.BLUSHY_SITE,
-                      kEvents.OPEN_NORMAL,
-                      kEvents.WHITELISTED_SITE,
-                      kEvents.WHITELISTED_SITE]);
-  });
+  return maybeShowPage(assert, kUrl, true).
+    then(function() { return testMonitor(assert, gEvents); });
 }
 
 function promiseVisitedUri(assert, aURIString) {
@@ -217,23 +203,17 @@ function testBlushThis(assert) {
   console.log("testBlushThis");
   let win = winUtils.getMostRecentBrowserWindow();
 
-  return promisePage(assert, kUrl, true).
+  gEvents = gEvents.concat([kEvents.ADD_BLUSHLIST, kEvents.BLUSHY_SITE]);
+  return maybeShowPage(assert, kUrl, true).
     then(function() { return promiseBlushButton(win, false); }).
     then(function() { return promiseBlushHidden(win); }).
     then(function() { return promiseVisitedUri(assert, kUrl); }).
     then(function(aVisited) {
       assert.ok(aVisited);
-      return promisePanel(assert, kUrl, true); }).
+      return maybeShowPanel(assert, kUrl, true); }).
     then(function(response) {
       response.event.detail.hide();
-      return testMonitor(assert, 
-        [kEvents.BLUSHY_SITE,
-         kEvents.OPEN_NORMAL,
-         kEvents.WHITELISTED_SITE,
-         kEvents.WHITELISTED_SITE,
-         kEvents.ADD_BLUSHLIST,
-         kEvents.BLUSHY_SITE]);
-    });
+      return testMonitor(assert, gEvents); });
 }
 
 function testBlushAndForgetThis(assert) {
@@ -241,27 +221,19 @@ function testBlushAndForgetThis(assert) {
   delete ss.storage.blushlist.map[key];
   let win = winUtils.getMostRecentBrowserWindow();
   console.log("testBlushAndForgetThis");
-  return promisePage(assert, kUrl, true).
+  gEvents = gEvents.concat([kEvents.FORGET_SITE, kEvents.ADD_BLUSHLIST,
+                            kEvents.BLUSHY_SITE]);
+  return maybeShowPage(assert, kUrl, true).
     then(function() { return promiseBlushButton(win, true); }).
     then(function() { return promiseBlushHidden(win); }).
     then(function() { return promiseVisitedUri(assert, kUrl); }).
     then(function(aVisited) {
       console.log("visited status", aVisited);
-      return promisePanel(assert, kUrl, true);
+      return maybeShowPanel(assert, kUrl, true);
     }).
     then(function(response) {
       response.event.detail.hide();
-      return testMonitor(assert, 
-        [kEvents.BLUSHY_SITE,
-         kEvents.OPEN_NORMAL,
-         kEvents.WHITELISTED_SITE,
-         kEvents.WHITELISTED_SITE,
-         kEvents.ADD_BLUSHLIST,
-         kEvents.BLUSHY_SITE,
-         kEvents.FORGET_SITE,
-         kEvents.ADD_BLUSHLIST,
-         kEvents.BLUSHY_SITE]);
-    });
+      return testMonitor(assert, gEvents); });
 }
 
 // In case the function name isn't clear: this test checks that we properly
@@ -272,31 +244,17 @@ function testUnblushUserBlushedSite(assert) {
   assert.equal(bpCategorizer.getCategoryForHost("localhost"),
                       "user",
                       "localhost should be in category 'user'");
-  return promisePanel(assert, kUrl, true).
-    then(function(response) {
-      assert.equal(response.message, "panel shown");
-      return postContinuation(response);
-    }).
-    then(function() { return promisePage(assert, kUrl, false); }).
+  gEvents = gEvents.concat([kEvents.BLUSHY_SITE, kEvents.OPEN_NORMAL,
+                            kEvents.WHITELISTED_SITE]);
+  return maybeShowPanel(assert, kUrl, true).
+    then(openInNormalWindow).
+    then(function() { return maybeShowPage(assert, kUrl, false); }).
     then(function() {
       assert.ok(!bpCategorizer.getCategoryForHost("localhost"),
                 "localhost should have no category now");
       assert.ok(!ss.storage.whitelistedCategories["user"],
                 "the 'user' category should never be whitelisted");
-      return testMonitor(assert,
-                        [kEvents.BLUSHY_SITE,
-                         kEvents.OPEN_NORMAL,
-                         kEvents.WHITELISTED_SITE,
-                         kEvents.WHITELISTED_SITE,
-                         kEvents.ADD_BLUSHLIST,
-                         kEvents.BLUSHY_SITE,
-                         kEvents.FORGET_SITE,
-                         kEvents.ADD_BLUSHLIST,
-                         kEvents.BLUSHY_SITE,
-                         kEvents.BLUSHY_SITE,
-                         kEvents.OPEN_NORMAL,
-                         kEvents.WHITELISTED_SITE]);
-    });
+      return testMonitor(assert, gEvents); });
 }
 
 function testWhitelistCategory(assert) {
@@ -322,32 +280,18 @@ function testWhitelistCategory(assert) {
   // only 2 sites in the "testing" category have been whitelisted, so we
   // expect a consent panel here
   console.log("testWhitelistCategory");
-  return promisePanel(assert, kUrl, true).
+  gEvents = gEvents.concat([kEvents.BLUSHY_SITE, kEvents.OPEN_NORMAL,
+                            kEvents.WHITELISTED_SITE]);
+  return maybeShowPanel(assert, kUrl, true).
     then(function(response) {
       assert.equal(response.message, "panel shown");
-      return postContinuation(response);
+      return openInNormalWindow(response);
     }).
-    then(function() { return promisePage(assert, kUrl, false); }).
+    then(function() { return maybeShowPage(assert, kUrl, false); }).
     then(function() {
       console.log("last one, baby!");
       assert.ok(bpCategorizer.isHostWhitelisted("thirdsite.com"));
-      return testMonitor(assert, [kEvents.BLUSHY_SITE,
-                         kEvents.OPEN_NORMAL,
-                         kEvents.WHITELISTED_SITE,
-                         kEvents.WHITELISTED_SITE,
-                         kEvents.ADD_BLUSHLIST,
-                         kEvents.BLUSHY_SITE,
-                         kEvents.FORGET_SITE,
-                         kEvents.ADD_BLUSHLIST,
-                         kEvents.BLUSHY_SITE,
-                         kEvents.BLUSHY_SITE,
-                         kEvents.OPEN_NORMAL,
-                         kEvents.WHITELISTED_SITE,
-                         kEvents.BLUSHY_SITE,
-                         kEvents.OPEN_NORMAL,
-                         kEvents.WHITELISTED_SITE,
-         ]);
-    });
+      return testMonitor(assert, gEvents); });
 }
 
 exports["test main async"] = function(assert, done) {
