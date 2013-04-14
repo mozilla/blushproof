@@ -20,12 +20,14 @@ const group = function (array) { return promised(Array).apply(null, array); };
  * @return promise
  */
 function testMonitor(assert, expectedEvents) {
+  console.log("trying to call test monitor");
   return monitor.upload("https://example.com", {simulate: true}).then(
     function checkContents(request) {
       var deferred = defer();
       let events = JSON.parse(request.content).events;
-      console.log("TEST MONITOR", JSON.stringify(request.content));
+      //console.log("TEST MONITOR", JSON.stringify(request.content));
       console.log("EVENTS", JSON.stringify(events));
+      console.log("EXPECTED EVENTS", JSON.stringify(expectedEvents));
       assert.equal(events.length, expectedEvents.length);
       for (let i = 0; i < events.length; ++i) {
         // Ignore the timestamp field
@@ -35,7 +37,7 @@ function testMonitor(assert, expectedEvents) {
       }
       deferred.resolve(true);
       return deferred.promise;
-    }); // .then(monitor.clear());
+    });//.then(monitor.clear);
 }
 
 /**
@@ -44,43 +46,17 @@ function testMonitor(assert, expectedEvents) {
  * @param aDoNav a boolean indicating the page should be navigated if true
  * @return promise resolving to the event and a message
  */
-function promisePanelOrPage(aURL, aDoNav) {
+function promisePanel(assert, aURL, aDoNav) {
   let win = winUtils.getMostRecentBrowserWindow();
-  let currentBrowser = win.gBrowser.selectedBrowser;
-
   let deferred = defer();
-  // We resolve the promise with the event and a message
-  let current = true;
-  let loadListener = function(event) {
-    console.log("promise uri", event.target.documentURI);
-    if (event.target.documentURI == aURL) {
-      if (!current) {
-        return;
-      }
-      current = false;
-      console.log("promise page");
-      cleanUp();
-      deferred.resolve({event: event, message: "page shown"});
-    }
-  };
-
-  let consentPanelShownListener = function(event) {
-    if (!current) {
-      return;
-    }
-    current = false;
-    console.log("promise panel");
-    cleanUp();
+  let consentPanelShownListener = null;
+  consentPanelShownListener = function(event) {
+    assert.pass("Got consent panel");
+    win.removeEventListener("ConsentPanelShown", consentPanelShownListener);
     deferred.resolve({event: event, message: "panel shown"});
   };
 
-  currentBrowser.addEventListener("load", loadListener, true);
   win.addEventListener("ConsentPanelShown", consentPanelShownListener);
-
-  let cleanUp = function() {
-    currentBrowser.removeEventListener("load", loadListener);
-    win.removeEventListener("ConsentPanelShown", consentPanelShownListener);
-  }
 
   // Using 'currentBrowser.contentWindow.location = aURL;'
   // somehow bypasses our content policy. I'm guessing it has something to do
@@ -91,26 +67,36 @@ function promisePanelOrPage(aURL, aDoNav) {
   return deferred.promise;
 }
 
-function promisePanel(assert, aURL, aDoNav) {
-  return promisePanelOrPage(aURL, aDoNav).
-    then(function(response) {
-      console.log("Promise panel resolved", response.message);
-      let deferred = defer();
-      assert.equal("panel shown", response.message);
-      deferred.resolve(response);
-      return deferred.promise;
-    });
-}
-
+/**
+ * Returns a promise whose resolution is an event and a message.
+ * @param aURL same as previously mentioned functions
+ * @param aDoNav a boolean indicating the page should be navigated if true
+ * @return promise resolving to the event and a message
+ */
 function promisePage(assert, aURL, aDoNav) {
-  return promisePanelOrPage(aURL, aDoNav).
-    then(function(response) {
-      console.log("Promise page resolved", response.message);
-      let deferred = defer();
-      assert.equal("page shown", response.message);
-      deferred.resolve(response);
-      return deferred.promise;
-    });
+  let win = winUtils.getMostRecentBrowserWindow();
+  let currentBrowser = win.gBrowser.selectedBrowser;
+
+  let deferred = defer();
+  // We resolve the promise with the event and a message
+  let loadListener = null;
+  loadListener = function(event) {
+    if (event.target.documentURI == aURL) {
+      assert.pass("Got promised url", aURL);
+      currentBrowser.removeEventListener("load", loadListener);
+      deferred.resolve({event: event, message: "page shown"});
+    }
+  };
+
+  currentBrowser.addEventListener("load", loadListener, true);
+
+  // Using 'currentBrowser.contentWindow.location = aURL;'
+  // somehow bypasses our content policy. I'm guessing it has something to do
+  // with chrome privileges, but I'm too annoyed with it to figure it out now.
+  if (aDoNav) {
+    tabs[0].url = aURL;
+  }
+  return deferred.promise;
 }
 
 function postContinuation(response) {
@@ -126,14 +112,19 @@ function postContinuation(response) {
  * @param aURL a string representing a url to load
  */
 function testExpectConsentPanelThenWhitelist(assert) {
+  console.log("testExpectConsentPanelThenWhitelist");
   const kUrl = "http://localhost:4444/";
   return promisePanel(assert, kUrl, true).
-    then(function(response) { return postContinuation(response); });
-    then(testMonitor(assert,
+    then(function(response) {
+      assert.equal(response.message, "panel shown");
+      return postContinuation(response);
+    }).
+    then(function() { return promisePage(assert, kUrl, false); }).
+    then(function() { return testMonitor(assert,
                      [kEvents.BLUSHY_SITE,
                       kEvents.OPEN_NORMAL,
-                      kEvents.WHITELISTED_SITE])).
-    then(promisePage(assert, kUrl, false));
+                      kEvents.WHITELISTED_SITE]);
+    });
 }
 
 /**
@@ -157,12 +148,15 @@ function promiseVisitedUri(aURIString) {
  * The second time we load localhost:4444, we don't expect to see a consent
  * panel, because we whitelisted it in the previous test.
  */
-function testExpectNoConsentPanelWhitelisted() {
-  expectNoConsentPanel("http://localhost:4444/", function() {
-    testMonitor([kEvents.BLUSHY_SITE,
-                 kEvents.OPEN_NORMAL,
-                 kEvents.WHITELISTED_SITE,
-                 kEvents.WHITELISTED_SITE]).then(runNextTest());
+function testExpectNoConsentPanelWhitelisted(assert) {
+  const kUrl = "http://localhost:4444/";
+  console.log("testExpectConsentPanelThenWhitelist");
+  return promisePage(assert, kUrl, true).
+    then(function() { return testMonitor(assert,
+                     [kEvents.BLUSHY_SITE,
+                      kEvents.OPEN_NORMAL,
+                      kEvents.WHITELISTED_SITE,
+                      kEvents.WHITELISTED_SITE]);
   });
 }
 
@@ -170,24 +164,25 @@ function testExpectNoConsentPanelWhitelisted() {
  * The third time we load localhost:4444, we don't expect to see a consent
  * panel, because we've removed it from the blushlist entirely.
  */
-function testExpectNoConsentPanelNotOnBlushlist() {
+function testExpectNoConsentPanelNotOnBlushlist(assert) {
+  const kUrl = "http://localhost:4444/";
   let key = bpUtil.getKeyForHost("localhost");
   delete ss.storage.blushlist.map[key];
   // We have to clear these together to keep things consistent.
   delete ss.storage.whitelistedDomains[key];
   delete ss.storage.whitelistedCategories["testing"];
-  gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
+  assert.equal(bpCategorizer.getCategoryForHost("localhost"),
                       null,
                       "'localhost' should not be on the blushlist");
-  gAssertObject.ok(!ss.storage.whitelistedDomains["localhost"],
+  assert.ok(!ss.storage.whitelistedDomains["localhost"],
                    "'localhost' should not be on the domain whitelist");
-  expectNoConsentPanel("http://localhost:4444/", function() {
-    // No new events are recorded
-    testMonitor([kEvents.BLUSHY_SITE,
-                 kEvents.OPEN_NORMAL,
-                 kEvents.WHITELISTED_SITE,
-                 kEvents.WHITELISTED_SITE]);
-    runNextTest();
+  // No new events
+  return promisePage(assert, kUrl, true).
+    then(function() { return testMonitor(assert,
+                     [kEvents.BLUSHY_SITE,
+                      kEvents.OPEN_NORMAL,
+                      kEvents.WHITELISTED_SITE,
+                      kEvents.WHITELISTED_SITE]);
   });
 }
 
@@ -390,19 +385,19 @@ exports["test main async"] = function(assert, done) {
   let httpServer = new nsHttpServer();
   httpServer.start(4444);
   testExpectConsentPanelThenWhitelist(assert).
-  then(function() {
-    console.log("we're done here, right?");
-    main.onUnload();
-    httpServer.stop(done);
-    done()
-  }).
-  then(null, function() {
-    assert.fail("Failed");
-    done();
-  });
+    then(function() { return testExpectNoConsentPanelWhitelisted(assert); }).
+    then(function() { return testExpectNoConsentPanelNotOnBlushlist(assert); }).
+    then(function() {
+      console.log("we're done here, right?");
+      main.onUnload();
+      httpServer.stop(done);
+      done()
+    }).
+    then(null, function() {
+      assert.fail("Failed");
+      done();
+    });
 /*
-             testExpectNoConsentPanelWhitelisted,
-             testExpectNoConsentPanelNotOnBlushlist,
              testBlushThis,
              testBlushAndForgetThis,
              testUnblushUserBlushedSite,
