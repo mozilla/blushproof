@@ -27,7 +27,6 @@ let gAssert = null;
  * @return promise
  */
 function testMonitor() {
-  //return monitor.upload("http://example.com", { simulate: true }).
   return monitor.upload("http://example.com", { simulate: true }).
     then(function checkContents(request) {
       var deferred = defer();
@@ -293,13 +292,9 @@ function testWhitelistCategory() {
   gEvents = gEvents.concat([kEvents.BLUSHY_SITE, kEvents.OPEN_NORMAL,
                             kEvents.WHITELISTED_SITE]);
   return maybeShowPanel(gUrl, true).
-    then(function(response) {
-      gAssert.equal(response.message, "panel shown");
-      return openInNormalWindow(response);
-    }).
+    then(openInNormalWindow).
     then(function() { return maybeShowPage(gUrl, false); }).
     then(function() {
-      console.log("last one, baby!");
       gAssert.ok(bpCategorizer.isHostWhitelisted("thirdsite.com"));
       return testMonitor(); });
 }
