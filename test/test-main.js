@@ -239,39 +239,10 @@ function testBlushThis(assert) {
 function testBlushAndForgetThis(assert) {
   let key = bpUtil.getKeyForHost("localhost");
   delete ss.storage.blushlist.map[key];
-  let promiseBlushHidden = function() {
-    let deferred = defer();
-    let blushPanelHiddenListener = function(event) {
-      win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
-      assert.equal(bpCategorizer.getCategoryForHost("localhost"),
-                   "user",
-                   "check using Blush This on 'localhost' works");
-      deferred.resolve(true);
-    }
-    win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
-    return deferred.promise;
-  }
-
-
-  let promiseBlushButton = function() {
-    let deferred = defer();
-    bpUI.blushButton.panel.show();
-    let blushPanelShownListener = function(event) {
-      console.log("pushing blush and forget button");
-      win.removeEventListener("BlushPanelShown", blushPanelShownListener);
-      event.detail.postMessage("blush");
-      event.detail.postMessage("forget");
-      deferred.resolve(true);
-    };
-    win.addEventListener("BlushPanelShown", blushPanelShownListener);
-    return deferred.promise;
-  }
-
-  console.log("testBlushAndForgetThis");
-  return promisePage(assert, kUrl, true);/*.
-    then(promiseBlushButton).
-    then(promiseBlushHidden).
-    then(function() { console.log("here");return promiseVisitedUri(assert, kUrl); }).
+  return promisePage(assert, kUrl, true).
+    then(function() { return promiseBlushButton(win); }).
+    then(function() { return promiseBlushHidden(win, true); }).
+    then(function() { return promiseVisitedUri(assert, kUrl); }).
     then(function(aVisited) {
       assert.ok(!aVisited);
       return promisePanel(assert, kUrl, true);
@@ -288,7 +259,6 @@ function testBlushAndForgetThis(assert) {
          kEvents.ADD_BLUSHLIST,
          kEvents.BLUSHY_SITE]);
     });
-*/
 }
 
 // In case the function name isn't clear: this test checks that we properly
@@ -398,11 +368,11 @@ exports["test main async"] = function(assert, done) {
                "sanity check that putting 'localhost' on the blushlist works");
   let httpServer = new nsHttpServer();
   httpServer.start(4444);
-    //then(function() { return testBlushAndForgetThis(assert); }).
   testExpectConsentPanelThenWhitelist(assert).
     then(function() { return testExpectNoConsentPanelWhitelisted(assert); }).
     then(function() { return testExpectNoConsentPanelNotOnBlushlist(assert); }).
     then(function() { return testBlushThis(assert); }).
+    then(function() { return testBlushAndForgetThis(assert); }).
     then(function() {
       console.log("we're done here, right?");
       main.onUnload();
