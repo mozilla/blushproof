@@ -5,5 +5,27 @@
   "description": "stop opening naughty sites accidentally",
   "author": "David Keeler <dkeeler@mozilla.com>, Monica Chew <mmc@mozilla.com>, Gregg Lind <glind@mozilla.com>",
   "license": "MPL 2.0",
-  "version": "0.1"
+  "version": "0.1",
+  "dependencies": [
+    "micropilot"
+  ],
+  "preferences": [
+    {
+      "type": "bool",
+      "title": "Enable debug messages",
+      "name": "micropilotlog",
+      "value": true
+    },
+    {
+      "type": "bool",
+      "title": "Report metrics",
+      "name": "enable_reporting",
+      "value": false
+    }
+  ],
+  "volo": {
+    "dependencies": {
+      "packages/micropilot": "github:gregglind/micropilot/v0.8"
+    }
+  }
 }

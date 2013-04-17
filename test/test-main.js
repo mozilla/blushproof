@@ -1,113 +1,68 @@
+"use strict";
+
 let main = require("main");
 let bpUtil = require("bpUtil");
 let bpUI = require("bpUI");
 let bpCategorizer = require("bpCategorizer");
+const { recordEvent, monitor, kEvents } = require("monitor");
 let ss = require("simple-storage");
 let winUtils = require("sdk/window/utils");
 let tabs = require("sdk/tabs");
 let { nsHttpServer } = require("sdk/test/httpd");
 const { Cc, Ci, Cu } = require("chrome");
-
 const { NetUtil } = Cu.import("resource://gre/modules/NetUtil.jsm", {});
+const { defer, resolve, promised } = require("sdk/core/promise");
+const group = function (array) { return promised(Array).apply(null, array); };
 
-let gHttpServer = null;
-// This gets set in the main async test function so we can signal
-// the test harness that we're done asynchronously.
-let gDoneFunction = null;
-// This gets set in the main async test function so we can note passes
-// and failures to the test harness asynchronously.
-let gAssertObject = null;
-let gTests = null;
-
-function runNextTest() {
-  let nextTest = gTests.shift();
-  if (nextTest) {
-    nextTest();
-  } else {
-    finishTest();
-  }
-}
+// The only URL we can visit
+const gUrl = "http://localhost:4444/";
+// The event queue that we expect
+let gEvents = [];
+// Global assert object
+let gAssert = null;
 
 /**
- * Given a url and a continuation to call upon completion, this function loads
- * up the url and expects that the consent panel will be shown.
- * @param aURL a string representing a url to load
- * @param aContinuation a function to call upon completion. The function takes
- *        two arguments: a boolean indicating success if true, and the
- *        event spawned by either the page load or consent panel opening.
+ * Returns a promise that resolves when we recorded what we expected, then
+ * clear the monitor.
  */
-function expectConsentPanel(aURL, aContinuation) {
-  expectOrNotPanelCommon(aURL, aContinuation, true, true);
+function testMonitor() {
+  return monitor.upload("http://example.com", { simulate: true }).
+    then(function checkContents(request) {
+      var deferred = defer();
+      let events = JSON.parse(request.content).events;
+      console.log("EVENTS", JSON.stringify(events));
+      console.log("EXPECTED EVENTS", JSON.stringify(gEvents));
+      gAssert.equal(events.length, gEvents.length);
+      for (let i = 0; i < events.length; ++i) {
+        // Ignore the timestamp field
+        gAssert.equal(events[i].event, gEvents[i]);
+        // Micropilot sticks an eventstoreid field on every record
+        gAssert.equal(events[i].eventstoreid, i + 1);
+      }
+      deferred.resolve(true);
+      return deferred.promise;
+    }).
+    // This clear is not working.
+    // then(monitor.clear).
+    then(null, function() { console.log("couldn't clear"); });
 }
 
 /**
- * Same as expectConsentPanel, except it is expected that the page load
- * succeeds and that no consent panel is shown.
- */
-function expectNoConsentPanel(aURL, aContinuation) {
-  expectOrNotPanelCommon(aURL, aContinuation, false, true);
-}
-
-/**
- * Same as expectNoConsentPanel, except it only sets up the appropriate
- * listeners - no navigation is done. The caller of this function must
- * perform the navigation itself (e.g. by clicking "open anyway" in a
- * previously shown consent panel).
- */
-function expectNoConsentPanelNoNav(aURL, aContinuation) {
-  expectOrNotPanelCommon(aURL, aContinuation, false, false);
-}
-
-/**
- * Common function for expectConsentPanel, expectNoConsentPanel, and
- * expectNoConsentPanelNoNav. Probably shouldn't be called directly (use
- * one of the aforementioned functions).
- * @param aURL same as previously mentioned functions
- * @param aContinuation same as previously mentioned functions
- * @param aExpectPanel a boolean indicating the panel is expected if true
+ * Resolves when we (optionally) navigate to aURL and show the consent panel.
+ * @param aURL The URL to navigate to.
  * @param aDoNav a boolean indicating the page should be navigated if true
+ * @return promise resolving to the event and a message
  */
-function expectOrNotPanelCommon(aURL, aContinuation, aExpectPanel, aDoNav) {
+function maybeShowConsentPanel(aURL, aDoNav) {
   let win = winUtils.getMostRecentBrowserWindow();
-  let currentBrowser = win.gBrowser.selectedBrowser;
-
-  let loadListener = null;
+  let deferred = defer();
   let consentPanelShownListener = null;
-  let current = true;
-
-  loadListener = function(event) {
-    if (event.target.documentURI == aURL) {
-      currentBrowser.removeEventListener("load", loadListener);
-      win.removeEventListener("ConsentPanelShown", consentPanelShownListener);
-      if (!current) {
-        return;
-      }
-      if (aExpectPanel) {
-        gAssertObject.fail("got page load when we shouldn't have");
-      } else {
-        gAssertObject.pass("got page load when it was okay to");
-      }
-      current = false;
-      aContinuation(!aExpectPanel, event);
-    }
-  };
-
   consentPanelShownListener = function(event) {
-    currentBrowser.removeEventListener("load", loadListener);
+    gAssert.pass("Got consent panel");
     win.removeEventListener("ConsentPanelShown", consentPanelShownListener);
-    if (!current) {
-      return;
-    }
-    if (aExpectPanel) {
-      gAssertObject.pass("panel shown when we were expecting it");
-    } else {
-      gAssertObject.fail("panel shown when we weren't expecting it");
-    }
-    current = false;
-    aContinuation(aExpectPanel, event);
+    deferred.resolve({event: event, message: "panel shown"});
   };
 
-  currentBrowser.addEventListener("load", loadListener, true);
   win.addEventListener("ConsentPanelShown", consentPanelShownListener);
 
   // Using 'currentBrowser.contentWindow.location = aURL;'
@@ -116,43 +71,109 @@ function expectOrNotPanelCommon(aURL, aContinuation, aExpectPanel, aDoNav) {
   if (aDoNav) {
     tabs[0].url = aURL;
   }
+  return deferred.promise;
 }
 
 /**
- * Given a string representing a URI and a callback to call upon completion,
- * this asks the async history service if the URI has been visited. The
- * callback takes a single boolean that is true if the URI has been visited.
- * @param aURIString a string representing a URI
- * @param aCallback a callback to call upon completion
+ * Resolves when we (optionally) navigate to a URL and load the page.
+ * @param aURL The URL to navigate to.
+ * @param aDoNav a boolean indicating the page should be navigated if true
+ * @return promise resolving to the event and a message
  */
-function asyncHaveVisitedURI(aURIString, aCallback) {
+function maybeShowPage(aURL, aDoNav) {
+  let win = winUtils.getMostRecentBrowserWindow();
+  let currentBrowser = win.gBrowser.selectedBrowser;
+
+  let deferred = defer();
+  // We resolve the promise with the event and a message
+  let loadListener = null;
+  loadListener = function(event) {
+    if (event.target.documentURI == aURL) {
+      gAssert.pass("Got promised url", aURL);
+      currentBrowser.removeEventListener("load", loadListener);
+      deferred.resolve({event: event, message: "page shown"});
+    }
+  };
+
+  currentBrowser.addEventListener("load", loadListener, true);
+
+  // Using 'currentBrowser.contentWindow.location = aURL;'
+  // somehow bypasses our content policy. I'm guessing it has something to do
+  // with chrome privileges, but I'm too annoyed with it to figure it out now.
+  if (aDoNav) {
+    tabs[0].url = aURL;
+  }
+  return deferred.promise;
+}
+
+// Wrapper function for choosing "Open in normal window"
+function openInNormalWindow(response) {
+  // TODO: This should resolve only when the post message has been processed
+  return resolve(response.event.detail.postMessage("continue"));
+}
+
+/**
+ * Returns a promise that resolves with visited status for the given URL.
+ */
+function isURIVisited(aURIString) {
+  let deferred = defer();
   let uri = NetUtil.newURI(aURIString, null, null);
   let asyncHistory = Cc["@mozilla.org/browser/history;1"]
                        .getService(Ci.mozIAsyncHistory);
   asyncHistory.isURIVisited(uri, function(aURI, aVisitedStatus) {
-    gAssertObject.equal(aURIString, aURI.spec,
-      "sanity check: we got back information about the URI we asked about");
-    aCallback(aVisitedStatus);
+    gAssert.equal(uri, aURI);
+    deferred.resolve(aVisitedStatus);
   });
+  return deferred.promise;
 }
 
 /**
- * The first time we load localhost:4444, we expect to see a consent
- * panel, because it's on the blushlist (we added it for this test under
- * the category "testing").
+ * Returns a promise that resolves when the blush panel is shown and the button
+ * is pushed, and the panel is hidden.
  */
-function testExpectConsentPanel() {
-  expectConsentPanel("http://localhost:4444/",
-    function(aSuccess, aEvent) {
-      if (aSuccess) {
-        let panel = aEvent.detail;
-        expectNoConsentPanelNoNav("http://localhost:4444/", runNextTest);
-        panel.postMessage("continue");
-      } else {
-        runNextTest();
-      }
+function maybePushBlushButton(win, aForget) {
+  let deferred = defer();
+  let blushPanelShownListener = function(event) {
+    console.log("pushing blush button");
+    win.removeEventListener("BlushPanelShown", blushPanelShownListener);
+    if (aForget) {
+      event.detail.postMessage("forget");
     }
-  );
+    event.detail.postMessage("blush");
+  };
+
+  let blushPanelHiddenListener = function(event) {
+    win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
+    deferred.resolve();
+  }
+
+  win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
+  win.addEventListener("BlushPanelShown", blushPanelShownListener);
+
+  bpUI.blushButton.panel.show();
+
+  return deferred.promise;
+}
+
+/**
+ * Put a URL on the blushlist, navigate to it, check the consent panel is
+ * shown, open it in a normal window, then check that it's on the whitelist.
+ * @return promise
+ */
+function testExpectConsentPanelThenWhitelist() {
+  console.log("testExpectConsentPanelThenWhitelist");
+  let key = bpUtil.getKeyForHost("localhost");
+  ss.storage.blushlist.map[key] = "testing";
+  gAssert.equal(bpCategorizer.getCategoryForHost("localhost"),
+                "testing",
+                "sanity check that putting 'localhost' on the blushlist works");
+  gEvents = [kEvents.BLUSHY_SITE,
+             kEvents.OPEN_NORMAL,
+             kEvents.WHITELISTED_SITE];
+  return maybeShowConsentPanel(gUrl, true).
+    then(openInNormalWindow).
+    then(function() { return maybeShowPage(gUrl, false); }).
+    then(testMonitor);
 }
 
 /**
@@ -160,7 +181,10 @@ function testExpectConsentPanel() {
  * panel, because we whitelisted it in the previous test.
  */
 function testExpectNoConsentPanelWhitelisted() {
-  expectNoConsentPanel("http://localhost:4444/", runNextTest);
+  console.log("testExpectConsentPanelWhitelisted");
+  gEvents.push(kEvents.WHITELISTED_SITE);
+  return maybeShowPage(gUrl, true).
+    then(testMonitor);
 }
 
 /**
@@ -170,187 +194,142 @@ function testExpectNoConsentPanelWhitelisted() {
 function testExpectNoConsentPanelNotOnBlushlist() {
   let key = bpUtil.getKeyForHost("localhost");
   delete ss.storage.blushlist.map[key];
-  // we have to clear these together to keep things consistent
+  // We have to clear these together to keep things consistent.
   delete ss.storage.whitelistedDomains[key];
   delete ss.storage.whitelistedCategories["testing"];
-  gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
-                      null,
-                      "'localhost' should not be on the blushlist");
-  gAssertObject.ok(!ss.storage.whitelistedDomains["localhost"],
-                   "'localhost' should not be on the domain whitelist");
-  expectNoConsentPanel("http://localhost:4444/", runNextTest);
+  gAssert.equal(bpCategorizer.getCategoryForHost("localhost"), null,
+                "'localhost' should not be on the blushlist");
+  gAssert.ok(!ss.storage.whitelistedDomains["localhost"],
+             "'localhost' should not be on the domain whitelist");
+  // No new events
+  return maybeShowPage(gUrl, true).
+    then(testMonitor);
 }
-
+/**
+ * Tests that we can push "blush this" and the next time we visit the site, a
+ * consent panel shows up.
+ */
 function testBlushThis() {
-  // The flow of this test is weird. Basically, go to the end of the function
-  // and see the comment there.
+  console.log("testBlushThis");
   let win = winUtils.getMostRecentBrowserWindow();
 
-  // ... and finally this.
-  let blushPanelHiddenListener = function(event) {
-    win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
-    gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
-                        "user",
-                        "sanity check that using Blush This on 'localhost' works");
-    asyncHaveVisitedURI("http://localhost:4444/", function(aVisitedStatus) {
-      gAssertObject.ok(aVisitedStatus, "we didn't clear history - should have http://localhost:4444/ in history");
-      expectConsentPanel("http://localhost:4444/", function(aSuccess, aEvent) {
-        if (aSuccess) {
-          let panel = aEvent.detail;
-          panel.hide();
-        }
-        runNextTest();
-      });
-    });
-  };
-
-  // ... and then this...
-  let blushPanelShownListener = function(event) {
-    win.removeEventListener("BlushPanelShown", blushPanelShownListener);
-    let panel = event.detail;
-    win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
-    panel.postMessage("blush");
-  };
-
-  // This is actually what get executed first...
-  win.addEventListener("BlushPanelShown", blushPanelShownListener);
-  expectNoConsentPanel("http://localhost:4444/", function() {
-    bpUI.blushButton.panel.show();
-  });
+  gEvents = gEvents.concat([kEvents.ADD_BLUSHLIST, kEvents.BLUSHY_SITE]);
+  return maybeShowPage(gUrl, true).
+    then(function() { return maybePushBlushButton(win, false); }).
+    then(function() { return isURIVisited(gUrl); }).
+    then(function(aVisited) {
+      gAssert.ok(aVisited, "We should have this in our history");
+      return maybeShowConsentPanel(gUrl, true); }).
+    then(function(response) {
+      response.event.detail.hide();
+      return testMonitor(); });
 }
 
+/**
+ * Tests that we can push "blush this" with "forget this site" checked and the
+ * next time we visit the site, a consent panel shows up, and the URL hasn't
+ * been visited.
+ */
 function testBlushAndForgetThis() {
   let key = bpUtil.getKeyForHost("localhost");
   delete ss.storage.blushlist.map[key];
-
   let win = winUtils.getMostRecentBrowserWindow();
-
-  let blushPanelHiddenListener = function(event) {
-    win.removeEventListener("BlushPanelHidden", blushPanelHiddenListener);
-    asyncHaveVisitedURI("http://localhost:4444/", function(aVisitedStatus) {
-      gAssertObject.ok(!aVisitedStatus, "removed site from history: shouldn't be there anymore");
-      gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
-                          "user",
-                          "sanity check that using Blush This on 'localhost' works");
-      expectConsentPanel("http://localhost:4444/", function(aSuccess, aEvent) {
-        if (aSuccess) {
-          let panel = aEvent.detail;
-          panel.hide();
-        }
-        runNextTest();
-      });
-    });
-  };
-
-  let blushPanelShownListener = function(event) {
-    win.removeEventListener("BlushPanelShown", blushPanelShownListener);
-    let panel = event.detail;
-    win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
-    panel.postMessage("forget");
-    panel.postMessage("blush");
-  };
-
-  win.addEventListener("BlushPanelShown", blushPanelShownListener);
-  expectNoConsentPanel("http://localhost:4444/", function() {
-    bpUI.blushButton.panel.show();
-  });
+  console.log("testBlushAndForgetThis");
+  gEvents = gEvents.concat([kEvents.FORGET_SITE, kEvents.ADD_BLUSHLIST,
+                            kEvents.BLUSHY_SITE]);
+  return maybeShowPage(gUrl, true).
+    then(function() { return maybePushBlushButton(win, true); }).
+    then(function() { return isURIVisited(gUrl); }).
+    then(function(aVisited) {
+      gAssert.ok(!aVisited, "We should have cleared this from our history");
+      return maybeShowConsentPanel(gUrl, true);
+    }).
+    then(function(response) {
+      response.event.detail.hide();
+      return testMonitor(); });
 }
 
-// In case the function name isn't clear: this test checks that we properly
-// remove a domain from the blushlist if the user used the "Blush This!"
-// button on it.
+/**
+ * Tests that we properly remove a domain from the blushlist if the user used
+ * the "Blush This!" button on it, then whitelists it.
+ */
 function testUnblushUserBlushedSite() {
-  gAssertObject.equal(bpCategorizer.getCategoryForHost("localhost"),
-                      "user",
-                      "localhost should be in category 'user'");
-  expectConsentPanel("http://localhost:4444/",
-    function(aSuccess, aEvent) {
-      if (aSuccess) {
-        let panel = aEvent.detail;
-        expectNoConsentPanelNoNav("http://localhost:4444/",
-          function() {
-            gAssertObject.ok(!bpCategorizer.getCategoryForHost("localhost"),
-                             "localhost should have no category now");
-            gAssertObject.ok(!ss.storage.whitelistedCategories["user"],
-                             "the 'user' category should never be whitelisted");
-            runNextTest();
-          }
-        );
-        panel.postMessage("continue");
-      } else {
-        runNextTest();
-      }
-    }
-  );
+  console.log("testUnblushUserBlushedSite");
+  gAssert.equal(bpCategorizer.getCategoryForHost("localhost"),
+                "user",
+                "localhost should be in category 'user'");
+  gEvents = gEvents.concat([kEvents.BLUSHY_SITE, kEvents.OPEN_NORMAL,
+                            kEvents.WHITELISTED_SITE]);
+  return maybeShowConsentPanel(gUrl, true).
+    then(openInNormalWindow).
+    then(function() { return maybeShowPage(gUrl, false); }).
+    then(function() {
+      gAssert.ok(!bpCategorizer.getCategoryForHost("localhost"),
+                 "localhost should have no category now");
+      gAssert.ok(!ss.storage.whitelistedCategories["user"],
+                "the 'user' category should never be whitelisted");
+      return testMonitor(); });
 }
 
-function testWhitelistCategoryAfter3DomainsWhitelisted() {
+/**
+ * Tests that we whitelist the entire category if domains in that category have
+ * been whitelisted 3 times.
+ */
+function testWhitelistCategory() {
+  console.log("testWhitelistCategory");
+
   let key = bpUtil.getKeyForHost("localhost");
   ss.storage.blushlist.map[key] = "testing";
+
   // we have to clear these together to keep things consistent
   delete ss.storage.whitelistedDomains[key];
   delete ss.storage.whitelistedCategories["testing"];
 
-  // we're not actually going to visit these sites - we just want them on
-  // the blushlist so we can whitelist them (which we do manually, here)
+  // Whitelist 2 different sites with category "testing"
   let key = bpUtil.getKeyForHost("example.com");
   ss.storage.blushlist.map[key] = "testing";
   bpCategorizer.whitelistHost("example.com");
-  let key = bpUtil.getKeyForHost("other-example.com");
+
+  key = bpUtil.getKeyForHost("other-example.com");
   ss.storage.blushlist.map[key] = "testing";
   bpCategorizer.whitelistHost("other-example.com");
-  // we're not whitelisting this site - this is how we see that this
-  // functionality worked
-  let key = bpUtil.getKeyForHost("thirdsite.com");
-  ss.storage.blushlist.map[key] = "testing";
-  gAssertObject.ok(!bpCategorizer.isHostWhitelisted("thirdsite.com"));
-  // only 2 sites in the "testing" category have been whitelisted, so we
-  // expect a consent panel here
-  expectConsentPanel("http://localhost:4444/",
-    function(aSuccess, aEvent) {
-      if (aSuccess) {
-        let panel = aEvent.detail;
-        expectNoConsentPanelNoNav("http://localhost:4444/",
-          function() {
-            gAssertObject.ok(bpCategorizer.isHostWhitelisted("thirdsite.com"));
-            runNextTest();
-          }
-        );
-        // When we post this message, we whitelist the third site in the
-        // category "testing". At that point, whitelistme.com (and anything
-        // else in that category) should be considered whitelisted.
-        panel.postMessage("continue");
-      } else {
-        runNextTest();
-      }
-    }
-  );
-}
 
-function finishTest() {
-  main.onUnload();
-  gHttpServer.stop(gDoneFunction);
+  // Add thirdsite.com to the blushlist with category "testing".
+  key = bpUtil.getKeyForHost("thirdsite.com");
+  ss.storage.blushlist.map[key] = "testing";
+  gAssert.ok(!bpCategorizer.isHostWhitelisted("thirdsite.com"));
+
+  gEvents = gEvents.concat([kEvents.BLUSHY_SITE, kEvents.OPEN_NORMAL,
+                            kEvents.WHITELISTED_SITE]);
+  return maybeShowConsentPanel(gUrl, true).
+    then(openInNormalWindow).
+    then(function() { return maybeShowPage(gUrl, false); }).
+    then(function() {
+      gAssert.ok(bpCategorizer.isHostWhitelisted("thirdsite.com"));
+      return testMonitor(); });
 }
 
 exports["test main async"] = function(assert, done) {
-  let key = bpUtil.getKeyForHost("localhost");
-  assert.pass("async Unit test running!");
-  ss.storage.blushlist.map[key] = "testing";
-  assert.equal(bpCategorizer.getCategoryForHost("localhost"),
-               "testing",
-               "sanity check that putting 'localhost' on the blushlist works");
-  gHttpServer = new nsHttpServer();
-  gHttpServer.start(4444);
-  gDoneFunction = done;
-  gAssertObject = assert;
-  gTests = [ testExpectConsentPanel,
-             testExpectNoConsentPanelWhitelisted,
-             testExpectNoConsentPanelNotOnBlushlist,
-             testBlushThis,
-             testBlushAndForgetThis,
-             testUnblushUserBlushedSite,
-             testWhitelistCategoryAfter3DomainsWhitelisted ];
-  runNextTest();
+  // Set our global assert object
+  gAssert = assert;
+  let httpServer = new nsHttpServer();
+  httpServer.start(4444);
+  testExpectConsentPanelThenWhitelist().
+    then(testExpectNoConsentPanelWhitelisted).
+    then(testExpectNoConsentPanelNotOnBlushlist).
+    then(testBlushThis).
+    then(testBlushAndForgetThis).
+    then(testUnblushUserBlushedSite).
+    then(testWhitelistCategory).
+    then(function() {
+      main.onUnload();
+      httpServer.stop(done);
+      done()
+    }).
+    then(null, function() {
+      assert.fail("Failed somewhere");
+      done();
+    });
 };
 
 /**
@@ -358,4 +337,4 @@ exports["test main async"] = function(assert, done) {
  * run our tests.
  */
 main.main();
-require("test").run(exports);
+require("sdk/test").run(exports);
