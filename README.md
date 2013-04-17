@@ -1,8 +1,13 @@
 For users: https://github.com/mozilla/blushproof/wiki
 
 For developers:
+Requirements: nodejs, volo version 0.2.8 or higher
+
 To checkout:  
+    `npm install -g volo`
     `git clone https://github.com/mozilla/blushproof`  
+    `cd blushproof`
+    `volo add micropilot packages/micropilot`
     `cd .git`  
     `rm -rf hooks`  
     `ln -s ../hooks .`
