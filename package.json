@@ -20,7 +20,7 @@
       "type": "bool",
       "title": "Report metrics",
       "name": "enable_reporting",
-      "value": false
+      "value": true
     }
   ],
   "volo": {
