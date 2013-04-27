@@ -135,8 +135,6 @@ function isURIVisited(aURIString) {
  */
 function maybePushBlushButton(win, aForget) {
   let deferred = defer();
-  bpUI.blushButton.panel.show();
-
   let blushPanelShownListener = function(event) {
     console.log("pushing blush button");
     win.removeEventListener("BlushPanelShown", blushPanelShownListener);
@@ -153,6 +151,9 @@ function maybePushBlushButton(win, aForget) {
 
   win.addEventListener("BlushPanelHidden", blushPanelHiddenListener);
   win.addEventListener("BlushPanelShown", blushPanelShownListener);
+
+  bpUI.blushButton.panel.show();
+
   return deferred.promise;
 }
 
@@ -166,8 +167,8 @@ function testExpectConsentPanelThenWhitelist() {
   let key = bpUtil.getKeyForHost("localhost");
   ss.storage.blushlist.map[key] = "testing";
   gAssert.equal(bpCategorizer.getCategoryForHost("localhost"),
-               "testing",
-               "sanity check that putting 'localhost' on the blushlist works");
+                "testing",
+                "sanity check that putting 'localhost' on the blushlist works");
   gEvents = [kEvents.BLUSHY_SITE,
              kEvents.OPEN_NORMAL,
              kEvents.WHITELISTED_SITE];
@@ -182,6 +183,8 @@ function testExpectConsentPanelThenWhitelist() {
  * panel, because we whitelisted it in the previous test.
  */
 function testExpectNoConsentPanelWhitelisted() {
+=======
+  console.log("testExpectNoConsentPanelWhitelisted");
   gEvents.push(kEvents.WHITELISTED_SITE);
   return maybeShowPage(gUrl, true).
     then(testMonitor);
@@ -197,11 +200,10 @@ function testExpectNoConsentPanelNotOnBlushlist() {
   // We have to clear these together to keep things consistent.
   delete ss.storage.whitelistedDomains[key];
   delete ss.storage.whitelistedCategories["testing"];
-  gAssert.equal(bpCategorizer.getCategoryForHost("localhost"),
-                      null,
-                      "'localhost' should not be on the blushlist");
+  gAssert.equal(bpCategorizer.getCategoryForHost("localhost"), null,
+                "'localhost' should not be on the blushlist");
   gAssert.ok(!ss.storage.whitelistedDomains["localhost"],
-                   "'localhost' should not be on the domain whitelist");
+             "'localhost' should not be on the domain whitelist");
   // No new events
   return maybeShowPage(gUrl, true).
     then(testMonitor);
@@ -250,13 +252,15 @@ function testBlushAndForgetThis() {
       return testMonitor(); });
 }
 
-// Tests that we properly remove a domain from the blushlist if the user used
-// the "Blush This!" button on it.
+/**
+ * Tests that we properly remove a domain from the blushlist if the user used
+ * the "Blush This!" button on it, then whitelists it.
+ */
 function testUnblushUserBlushedSite() {
   console.log("testUnblushUserBlushedSite");
   gAssert.equal(bpCategorizer.getCategoryForHost("localhost"),
-                      "user",
-                      "localhost should be in category 'user'");
+                "user",
+                "localhost should be in category 'user'");
   gEvents = gEvents.concat([kEvents.BLUSHY_SITE, kEvents.OPEN_NORMAL,
                             kEvents.WHITELISTED_SITE]);
   return maybeShowConsentPanel(gUrl, true).
@@ -264,7 +268,7 @@ function testUnblushUserBlushedSite() {
     then(function() { return maybeShowPage(gUrl, false); }).
     then(function() {
       gAssert.ok(!bpCategorizer.getCategoryForHost("localhost"),
-                "localhost should have no category now");
+                 "localhost should have no category now");
       gAssert.ok(!ss.storage.whitelistedCategories["user"],
                 "the 'user' category should never be whitelisted");
       return testMonitor(); });
