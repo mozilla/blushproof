@@ -9,6 +9,8 @@ let ss = require("simple-storage");
 let winUtils = require("sdk/window/utils");
 let tabs = require("sdk/tabs");
 let { nsHttpServer } = require("sdk/test/httpd");
+const myprefs = require("simple-prefs").prefs;
+
 const { Cc, Ci, Cu } = require("chrome");
 const { NetUtil } = Cu.import("resource://gre/modules/NetUtil.jsm", {});
 const { defer, resolve, promised } = require("sdk/core/promise");
@@ -181,7 +183,7 @@ function testExpectConsentPanelThenWhitelist() {
  * panel, because we whitelisted it in the previous test.
  */
 function testExpectNoConsentPanelWhitelisted() {
-  console.log("testExpectConsentPanelWhitelisted");
+  console.log("testExpectNoConsentPanelWhitelisted");
   gEvents.push(kEvents.WHITELISTED_SITE);
   return maybeShowPage(gUrl, true).
     then(testMonitor);
@@ -314,6 +316,7 @@ exports["test main async"] = function(assert, done) {
   gAssert = assert;
   let httpServer = new nsHttpServer();
   httpServer.start(4444);
+  myprefs.enable_reporting = false;
   testExpectConsentPanelThenWhitelist().
     then(testExpectNoConsentPanelWhitelisted).
     then(testExpectNoConsentPanelNotOnBlushlist).
