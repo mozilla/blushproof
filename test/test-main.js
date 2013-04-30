@@ -183,7 +183,6 @@ function testExpectConsentPanelThenWhitelist() {
  * panel, because we whitelisted it in the previous test.
  */
 function testExpectNoConsentPanelWhitelisted() {
-=======
   console.log("testExpectNoConsentPanelWhitelisted");
   gEvents.push(kEvents.WHITELISTED_SITE);
   return maybeShowPage(gUrl, true).
