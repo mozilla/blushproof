@@ -17,7 +17,7 @@ class QuerySyncer:
     self.max_count = max_count
 
   def get_top_hits(self, search_term):
-    """Returns 1 if the addon_id is probably bad, 0 otherwise."""
+    """Searches for the given term and returns an array of TLD hits."""
     # A custom search URL. cx is a global search engine.
     search_url = ("https://www.googleapis.com/customsearch/v1?" +
             "cx=018149516584340204128:67tqllu_gne&key=%s&q=%s&alt=json" %
@@ -31,7 +31,7 @@ class QuerySyncer:
     return self.parse_results(buf.getvalue())
 
   def parse_results(self, result_string):
-    """Parses JSON search results and returns 1 if it's probably malware."""
+    """Parses JSON search results and returns max_count TLD results."""
     result = json.loads(result_string)
     if "items" not in result:
       raise Exception("Didn't get meaningful results", result_string)
@@ -48,7 +48,7 @@ class QuerySyncer:
     return urls
 
   def process_search_terms(self, input_file, output_file):
-    """Reads addon_id and counts, writes output_file with verdict."""
+    """Reads file with search terms, writes output_file with search results."""
     f_out = open(output_file, "w")
     # Each line of the input contains an addon id
     try:
