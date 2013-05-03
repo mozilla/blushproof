@@ -1,3 +1,4 @@
 *.swp
 *~
+.apikey
 packages/micropilot
