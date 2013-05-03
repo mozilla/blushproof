@@ -6,6 +6,7 @@ import json
 import pycurl
 import sys
 import tldextract
+import urllib
 
 import StringIO
 
@@ -21,7 +22,7 @@ class QuerySyncer:
     # A custom search URL. cx is a global search engine.
     search_url = ("https://www.googleapis.com/customsearch/v1?" +
             "cx=018149516584340204128:67tqllu_gne&key=%s&q=%s&alt=json" %
-            (self.api_key, search_term))
+            (self.api_key, urllib.quote_plus(search_term)))
     buf = StringIO.StringIO()
     curl = pycurl.Curl()
     curl.setopt(curl.URL, search_url)
