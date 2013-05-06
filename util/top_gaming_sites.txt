@@ -10,7 +10,6 @@ ea.com
 leagueoflegends.com
 gamefaqs.com
 king.com
-games.yahoo.com
 kongregate.com
 playstation.com
 minecraft.net
@@ -38,11 +37,9 @@ chesstempo.com
 scrabulizer.com
 chessbomb.com
 wordsolver.net
-boardgames.about.com
 uschess.org
 chesscafe.com
 daysofwonder.com
-games.asobrain.com
 365chess.com
 phrontistery.info
 dragongoserver.net
