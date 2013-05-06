@@ -1,0 +1,47 @@
+acne
+add
+adhd
+aids
+allergies
+alzheimers
+anxiety
+arthritis
+asthma
+autism
+back pain
+bipolar disorder
+blood pressure
+cancer
+cholesterol
+cold
+copd
+depression
+diabetes
+emphysema
+epilepsy
+erectile dysfunction
+fibromyalgia
+flu
+gout
+hair loss
+heart disease
+hiv
+hypertension
+insomnia
+medicine
+menopause
+mens health
+mental health
+multiple sclerosis
+nutrition
+obesity
+osteoporosis
+pain
+parkinsons disease
+pregnancy
+sleep apnea
+sleep disorders
+stress
+stroke
+weight loss
+womens health
