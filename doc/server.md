@@ -43,7 +43,7 @@ How to set up the server
             }
   * cert.{pem,key} is the certificate and key for the server
   * Listening on 8443 turns into listening on 443 through AWS magic, AIUI
-  * Forwarding to port 8158 means we can run an unpriveleged node server and not have to enter our key's passphrase every time we restart that server
+  * Forwarding to port 8158 means we can run an unprivileged node server and not have to enter our key's passphrase every time we restart that server
 3. Install things as the 'app' user on the AWS instance
   * Node packages 'promise', 'http', 'sqlite3'
   * server/server.js
@@ -51,4 +51,4 @@ How to set up the server
   * As ec2-user: 'sudo /etc/init.d/nginx start' (requires key passphrase, logs in /var/log/nginx)
   * As app: 'node server.js' (this creates the file 'events.sqlite')
 5. Are events coming in as expected?
-  * Try 'sqlite3 events.sqlite', then 'select * from events where 1=1;'
+  * Try 'sqlite3 events.sqlite', then 'select * from events;'
