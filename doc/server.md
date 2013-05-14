@@ -44,6 +44,7 @@ How to set up the server
   * cert.{pem,key} is the certificate and key for the server
   * Listening on 8443 turns into listening on 443 through AWS magic, AIUI
   * Forwarding to port 8158 means we can run an unprivileged node server and not have to enter our key's passphrase every time we restart that server
+  * "`ssl_ciphers  HIGH:!aNULL:!MD5;`" means no null-ciphers and no md5 (this is per the default Nginx sample configuration)
 3. Install things as the 'app' user on the AWS instance
   * Node packages 'promise', 'http', 'sqlite3'
   * server/server.js
