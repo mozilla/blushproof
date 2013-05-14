@@ -1,11 +1,11 @@
 {
   "name": "blushproof",
-  "fullName": "blushproof",
+  "fullName": "Blushproof",
   "id": "blushproof@ux.mozilla.com",
-  "description": "stop opening naughty sites accidentally",
+  "description": "Stop opening embarrassing sites accidentally",
   "author": "David Keeler <dkeeler@mozilla.com>, Monica Chew <mmc@mozilla.com>, Gregg Lind <glind@mozilla.com>",
   "license": "MPL 2.0",
-  "version": "0.1",
+  "version": "0.9",
   "dependencies": [
     "micropilot"
   ],
