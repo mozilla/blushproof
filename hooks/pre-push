@@ -3,7 +3,7 @@
 # the path in the CFX_FIREFOX environment variable.
 
 cmd='cfx test'
-if [ -n $CFX_FIREFOX ];
+if [ -n "$CFX_FIREFOX" ];
 then
   cmd="$cmd -b $CFX_FIREFOX"
 fi
