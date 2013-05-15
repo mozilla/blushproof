@@ -9,4 +9,3 @@ then
 fi
 echo $cmd
 $cmd
-exit $?

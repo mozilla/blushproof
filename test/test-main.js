@@ -307,7 +307,7 @@ function testWhitelistCategory() {
     then(openInNormalWindow).
     then(function() { return maybeShowPage(gUrl, false); }).
     then(function() {
-      gAssert.ok(bpCategorizer.isHostWhitelisted("thirdsite.com"));
+      gAssert.ok(!bpCategorizer.isHostWhitelisted("thirdsite.com"));
       return testMonitor(); });
 }
 
