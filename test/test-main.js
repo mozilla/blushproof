@@ -317,6 +317,7 @@ exports["test main async"] = function(assert, done) {
   let httpServer = new nsHttpServer();
   httpServer.start(4444);
   myprefs.enable_reporting = false;
+  assert.fail("failed");
   testExpectConsentPanelThenWhitelist().
     then(testExpectNoConsentPanelWhitelisted).
     then(testExpectNoConsentPanelNotOnBlushlist).
