@@ -1,6 +1,6 @@
 "use strict";
 
-const EXPECTED_VERSION = "0.9";
+var EXPECTED_VERSION = "0.9";
 var Promise = require("promise");
 var http = require("http");
 var sqlite3 = require("sqlite3").verbose();
