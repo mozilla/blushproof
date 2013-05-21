@@ -1,5 +1,6 @@
 "use strict";
 
+var EXPECTED_VERSION = "0.9";
 var Promise = require("promise");
 var http = require("http");
 var sqlite3 = require("sqlite3").verbose();
@@ -27,7 +28,7 @@ function createDB() {
  * eventTS (INTEGER): time of the event, truncated to the hour
  * eventSTR (TEXT): a string describing the event
  * userID (TEXT): a unique ID for the user that performed the event
- * bpVersion (TEXT): the version of blushproof in use
+ * version (TEXT): the version of the data format in use
  * All times are in seconds.
  */
 function createTable() {
@@ -36,7 +37,7 @@ function createTable() {
     db.run("CREATE TABLE IF NOT EXISTS events(" +
            "uploadTS INTEGER, uploadID TEXT," +
            "eventTS INTEGER, eventSTR TEXT," +
-           "userID TEXT, bpVersion TEXT)",
+           "userID TEXT, version TEXT)",
            resolve());
   });
   return promise;
@@ -51,13 +52,13 @@ function createTable() {
  *   personid: (a string representing a unique ID of a user)
  *   uploadid: (a string representing a unique ID of an upload)
  *   ts: (the time of the upload)
- *   version: (the version of blushproof)
  * }
  *
  * where the structure of an 'event' is as follows:
  * {
  *   timestamp: (the time of the event, truncated to the hour)
  *   event: (a string describing the event)
+ *   version: (a string describing the version of the data format)
  * }
  *
  * All times are in seconds.
@@ -76,19 +77,20 @@ function handleData(jsonString) {
     } else {
       for (var i in json.events) {
         var evt = json.events[i];
-        if (!evt.timestamp || !evt.event) {
+        if (!evt.timestamp || !evt.event || !evt.version ||
+            evt.version != EXPECTED_VERSION) {
           result = badResult;
           break;
         }
         db.run("INSERT INTO events VALUES (" +
                ":uploadTS, :uploadID, :eventTS, " +
-               ":eventSTR, :userID, :bpVersion)",
+               ":eventSTR, :userID, :version)",
                { ":uploadTS"  : json.ts,
                  ":uploadID"  : json.uploadid,
                  ":eventTS"   : evt.timestamp,
                  ":eventSTR"  : evt.event,
                  ":userID"    : json.personid,
-                 ":bpVersion" : "XXX" });
+                 ":version"   : evt.version });
       }
     }
 
