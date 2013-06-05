@@ -311,6 +311,34 @@ function testWhitelistCategory() {
       return testMonitor(); });
 }
 
+/**
+ * Put a URL on the blushlist, navigate to it in a background tab,
+ * and check that we focus on that tab.
+ * @return promise
+ */
+function testFocusOnBlushyTab() {
+  console.log("testFocusOnBlushyTab");
+  let key = bpUtil.getKeyForHost("localhost");
+  ss.storage.blushlist.map[key] = "testing";
+
+  // we have to clear these together to keep things consistent
+  delete ss.storage.whitelistedDomains[key];
+  delete ss.storage.whitelistedCategories["testing"];
+
+  gEvents = gEvents.concat([kEvents.BLUSHY_SITE]);
+  let promise = maybeShowConsentPanel(gUrl, false);
+  gAssert.ok(tabs.activeTab.index == 0, "active tab should be index 0");
+  tabs.open({ url: "about:blank",
+              inBackground: true,
+              onReady: function() { tabs[1].url = "http://localhost:4444/"; }
+            });
+  return promise.
+    then(function() { gAssert.ok(tabs.activeTab.index == 1,
+                                 "active tab should be index 1 now");
+                      tabs[1].close(); }).
+    then(testMonitor);
+}
+
 exports["test main async"] = function(assert, done) {
   // Set our global assert object
   gAssert = assert;
@@ -324,6 +352,7 @@ exports["test main async"] = function(assert, done) {
     then(testBlushAndForgetThis).
     then(testUnblushUserBlushedSite).
     then(testWhitelistCategory).
+    then(testFocusOnBlushyTab).
     then(function() {
       main.onUnload();
       httpServer.stop(done);
