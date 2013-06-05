@@ -327,14 +327,14 @@ function testFocusOnBlushyTab() {
 
   gEvents = gEvents.concat([kEvents.BLUSHY_SITE]);
   let promise = maybeShowConsentPanel(gUrl, false);
-  gAssert.ok(tabs.activeTab.index == 0, "active tab should be index 0");
+  gAssert.equal(0, tabs.activeTab.index, "active tab should be index 0");
   tabs.open({ url: "about:blank",
               inBackground: true,
               onReady: function() { tabs[1].url = "http://localhost:4444/"; }
             });
   return promise.
-    then(function() { gAssert.ok(tabs.activeTab.index == 1,
-                                 "active tab should be index 1 now");
+    then(function() { gAssert.equal(1, tabs.activeTab.index,
+                                    "active tab should be index 1 now");
                       tabs[1].close(); }).
     then(testMonitor);
 }
