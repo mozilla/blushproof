@@ -41,7 +41,6 @@ xanax
 ale
 amoroso
 beer
-belgium
 bourbon
 brandy
 cocktail
@@ -50,8 +49,6 @@ conjuro
 dia hispanidad
 gin
 home brewing
-italian
-japanese
 lager
 long island iced tea
 longdrink
