@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <script src="d3.v3.min.js" charset="utf-8"></script>
+  <script src="xcharts.min.js"></script>
+  <link rel="stylesheet" href="xcharts.min.css">
+
+  <script src="events.js"></script>
+  <style>
+    text {
+      stroke: #000000 !important;
+      fill: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="tooltip" style="position: absolute; background-color: grey; display: none;"></div>
+  <script>
+    document.onmousemove = function(event) {
+      var tooltip = document.getElementById("tooltip");
+      tooltip.style.left = event.pageX + "px";
+      tooltip.style.top = (event.pageY - 20) + "px";
+    }
+
+    function Chart(aType, aWidth, aHeight, aTitle) {
+      this.type = aType;
+      this.width = aWidth;
+      this.height = aHeight;
+      this.title = aTitle;
+      this.times = {};
+      this.minTime = Number.MAX_VALUE;
+      this.maxTime = 0;
+      for (var evt of events) {
+        if (evt.event == aType || aType == "total") {
+          if (evt.time < this.minTime) this.minTime = evt.time;
+          if (evt.time > this.maxTime) this.maxTime = evt.time;
+          if (!this.times[evt.time]) this.times[evt.time] = 0;
+          this.times[evt.time]++;
+        }
+      }
+      this.currentMin = this.minTime;
+      this.currentMax = this.maxTime;
+      // Our time resolution is on the order of an hour (in seconds).
+      // Make sure we have an entry for each hour in our range.
+      // (xCharts can't figure out how to make a bar graph out of
+      // anything but 'ordinal' data.)
+      for (var t = this.minTime; t < this.maxTime; t += 3600) {
+        if (!this.times[t]) this.times[t] = 0;
+      }
+      this.outer = document.createElement("div");
+      var title = document.createElement("h2");
+      title.textContent = aTitle;
+      this.outer.appendChild(title);
+      document.body.appendChild(this.outer);
+      this.update(this.currentMin, this.currentMax);
+    };
+
+    Chart.prototype = {
+      zoom: function Chart_zoom(event) {
+        event.preventDefault();
+        var rect = event.target.getBoundingClientRect();
+        var p = (event.clientX - rect.left) / rect.width;
+        var difference = this.currentMax - this.currentMin;
+        var newMin = (event.detail > 0 ? this.currentMin - (p*difference/2):
+                                         this.currentMin + (p*difference/2));
+        var newMax = (event.detail > 0 ? this.currentMax + ((1-p)*difference/2):
+                                         this.currentMax - ((1-p)*difference/2));
+        if (newMin < this.minTime) newMin = this.minTime;
+        if (newMax > this.maxTime) newMax = this.maxTime;
+        if (newMin > newMax) newMin = newMax;
+        if (newMin != this.currentMin && newMax != this.currentMax) {
+          this.update(newMin, newMax);
+        }
+      },
+
+      update: function Chart_update(aMinTime, aMaxTime) {
+        this.currentMin = aMinTime;
+        this.currentMax = aMaxTime;
+        var data = {
+          xScale: "ordinal",
+          yScale: "linear",
+          main: [{ data: [] }]
+        };
+        for (var time in this.times) {
+          if (time >= aMinTime && time <= aMaxTime) {
+            data.main[0].data.push({ x: time, y: this.times[time] });
+          }
+        }
+        var opts = {
+          dataFormatX: function(x) { return new Date(x * 1000); },
+          tickFormatX: function(x) { return d3.time.format('%d %b %H:00')(x); },
+          tickHintX: 7,
+          mouseover: function(d, i) {
+            var tooltip = document.getElementById("tooltip");
+            var timestr = d3.time.format('%d %b %H:00')(d.x);
+            tooltip.textContent = timestr + ": " + d.y;
+            tooltip.style.display = "inline";
+          },
+          mouseout: function(d, i) {
+            var tooltip = document.getElementById("tooltip");
+            tooltip.style.display = "none";
+          }
+        };
+        var inner = document.getElementById(this.type);
+        if (inner) {
+          this.outer.removeChild(inner);
+        }
+        inner = document.createElement("div");
+        inner.id = this.type;
+        inner.style.width = this.width + "px";
+        inner.style.height = this.height + "px";
+        inner.addEventListener("DOMMouseScroll", this.zoom.bind(this), false);
+        this.outer.appendChild(inner);
+        var chart = new xChart('bar', data, '#' + this.type, opts);
+      }
+    };
+
+    new Chart("total", 750, 400, "Total Events");
+    new Chart("blushy-query", 750, 400, "Blushy Queries");
+    new Chart("blushy-site", 750, 400, "Blushy Sites");
+    new Chart("forget-site", 750, 400, "Forgotten Sites");
+    new Chart("open-normal", 750, 400, "Opened in Normal");
+    new Chart("open-private", 750, 400, "Opened in Private");
+    new Chart("whitelisted-site", 750, 400, "Whitelisted Sites");
+ </script>
+</body>
+</html>
