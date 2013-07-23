@@ -2,16 +2,30 @@
 <body>
 <center>
   <img src="blushproof-32.png"></img>
-  <p>Visiting this page might be embarassing if someone found out.</p>
-  <p>Would you like to open it in a private browsing window?</p>
+  <div id="domain-container">
+    <p>Visiting the <span id="domain-category"></span> site '<span id="domain"></span>' might be embarrassing if someone found out.</p>
+  </div>
+  <div id="query-container">
+    <p>Searching for the <span id="query-category"></span> term '<span id="query"></span>' might be embarrassing if someone found out.</p>
+  </div>
   <p>
     <button onClick="addon.postMessage('openInPrivate');">Use Private Window</button>
-    <button onClick="addon.postMessage('continue');">Use Normal Window</button>
+    <button onClick="addon.postMessage('continue');">Continue Navigation</button>
   </p>
 </center>
 <script>
   // this enables the test harness to act as if a button has been pressed
-  addon.on("message", function(message) { addon.postMessage(message); });
+  addon.on("message", function(message) {
+    if (message.type && message.category && message.value) {
+      document.getElementById(message.type + "-category").textContent = message.category;
+      document.getElementById(message.type).textContent = message.value;
+      document.getElementById(message.type + "-container").style.display = "block";
+      var othertype = (message.type == "domain" ? "query" : "domain");
+      document.getElementById(othertype + "-container").style.display = "none";
+    } else {
+      addon.postMessage(message);
+    }
+  });
 </script>
 </body>
 </html>
