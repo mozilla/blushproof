@@ -5,7 +5,7 @@
   "description": "Stop opening embarrassing sites accidentally",
   "author": "David Keeler, Monica Chew, Gregg Lind",
   "license": "MPL 2.0",
-  "version": "0.9",
+  "version": "0.91",
   "dependencies": [
     "addon-sdk",
     "micropilot"
