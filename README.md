@@ -24,4 +24,4 @@ To run:
 Setting the profile_dir is necessary when testing functionality across
 restarts.
 
-Style guidelines: [http://google-styleguide.googlecode.com/svn/trunk/javascriptguide.xml](http://google-styleguide.googlecode.com/svn/trunk/javascriptguide.xml)
+Style guidelines: [https://google.github.io/styleguide/javascriptguide.xml](https://google.github.io/styleguide/javascriptguide.xml)
